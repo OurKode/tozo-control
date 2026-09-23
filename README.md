@@ -95,7 +95,7 @@ When applying a custom EQ curve or preset, a 24-byte packet is constructed and s
 
 ### Build Debug APK
 ```bash
-git clone https://github.com/ourkode/tozo-control.git
+git clone https://github.com/OurKode/tozo-control.git
 cd tozo-control
 ./gradlew assembleDebug
 ```
