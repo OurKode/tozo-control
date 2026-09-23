@@ -43,7 +43,7 @@ Communication with TOZO earbuds occurs over standard Bluetooth Low Energy GATT c
 
 ### Command Protocol Table
 
-#### 1. Hardware State Queries (App $\rightarrow$ Earbud)
+#### 1. Hardware State Queries (App → Earbud)
 
 | Parameter | Query Command (Hex) | Expected Notification Response (Hex) | Description |
 | :--- | :--- | :--- | :--- |
@@ -54,7 +54,7 @@ Communication with TOZO earbuds occurs over standard Bluetooth Low Energy GATT c
 | **Noise Mode Status** | `00040000` | `000401 [00 / 01] [chk]` | `01` = ANC, `00` = Normal |
 | **Equalizer DSP Status** | `000b0000` | `000b14 [10 gain bytes] [10 Qs]` | 10 frequency band gains in tenths of dB |
 
-#### 2. Control Commands (App $\rightarrow$ Earbud)
+#### 2. Control Commands (App → Earbud)
 
 | Control | Command (Hex) | Notes |
 | :--- | :--- | :--- |
@@ -77,12 +77,12 @@ When applying a custom EQ curve or preset, a 24-byte packet is constructed and s
 ```
 
 1. **Header**: `0x10, 0x0B, 0x15` (Command Opcode `0x100B`, length `21 bytes`).
-2. **Gain Array (10 bytes)**: Frequencies: `31Hz, 62Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz`.
-   - Formula: $\text{raw} = \text{round}(\text{gain\_dB} \times 10)$
-   - Range: $-10.0\text{ dB}$ (`0x9C` / $-100$) to $+10.0\text{ dB}$ (`0x64` / $+100$).
+2. **Gain Array (10 bytes)**: Frequencies: `31Hz`, `62Hz`, `125Hz`, `250Hz`, `500Hz`, `1kHz`, `2kHz`, `4kHz`, `8kHz`, `16kHz`.
+   - Formula: `raw = round(gain_dB * 10)`
+   - Range: `-10.0 dB` (`0x9C` / `-100`) to `+10.0 dB` (`0x64` / `+100`).
 3. **Q-Factor Array (10 bytes)**: Default filter widths: `[0x05, 0x06, 0x07, 0x08, 0x0A, 0x0C, 0x0E, 0x00, 0x00, 0x00]`.
 4. **Tail**: Fixed value `0x01`.
-5. **Checksum (1 byte)**: Sum of all 21 payload bytes modulo 256 ($\sum \text{payload} \pmod{256}$).
+5. **Checksum (1 byte)**: Sum of all 21 payload bytes modulo 256 (`sum(payload) % 256`).
 
 ---
 
