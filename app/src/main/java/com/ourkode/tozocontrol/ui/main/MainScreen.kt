@@ -13,8 +13,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,13 +32,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1099,188 +1103,419 @@ private fun EqualizerPanel(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // 10 Tactile Vertical Faders Rack
-        // Horizontal scroll container with min 48dp width per column prevents finger collision on narrow screens
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val totalWidth = maxWidth
-            val columnWidth = (totalWidth / 10).coerceAtLeast(46.dp)
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                eqGains.forEachIndexed { idx, gain ->
-                    TactileFaderColumn(
-                        freq = FREQ_LABELS[idx],
-                        value = gain,
-                        enabled = true,
-                        onValueChange = { onGainChange(idx, it) },
-                        modifier = Modifier.width(columnWidth)
-                    )
-                }
-            }
-        }
+        // Interactive 10-Band Graphic Equalizer Curve & Studio Fine-Tuning Strip
+        // Renders all 10 bands simultaneously with zero horizontal overflow
+        InteractiveGraphicEq(
+            eqGains = eqGains,
+            enabled = true,
+            onGainChange = onGainChange,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
 @Composable
-private fun TactileFaderColumn(
-    freq: String,
-    value: Float,
+private fun InteractiveGraphicEq(
+    eqGains: List<Float>,
     enabled: Boolean,
-    onValueChange: (Float) -> Unit,
+    onGainChange: (Int, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var selectedBandIndex by remember { mutableIntStateOf(4) } // Default selection: 500 Hz
     val haptic = LocalHapticFeedback.current
-    val currentOnValueChange by rememberUpdatedState(onValueChange)
-    val isNonZero = kotlin.math.abs(value) >= 0.2f
+    val currentOnGainChange by rememberUpdatedState(onGainChange)
+    val textMeasurer = rememberTextMeasurer()
 
+    val surfaceColor = MaterialTheme.colorScheme.surface
     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
     val outlineColor = MaterialTheme.colorScheme.outline
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val accentColor = MaterialTheme.colorScheme.primary
+    val primaryColor = MaterialTheme.colorScheme.primary
 
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Gain Readout (+4.5, 0.0, -2.0)
-        Text(
-            text = "${if (value > 0) "+" else ""}${"%.1f".format(value)}",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (isNonZero) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isNonZero) onSurfaceColor else onSurfaceVariantColor
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Tactile Fader Track with full column touchable area & haptics
+    Column(modifier = modifier) {
+        // 1. Interactive Graphic Curve Canvas Container
         Box(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
-                    detectTapGestures { offset ->
-                        val padding = 8f
-                        val effectiveHeight = (size.height - padding * 2).coerceAtLeast(1f)
-                        val clampedY = (offset.y - padding).coerceIn(0f, effectiveHeight)
-                        val frac = 1f - (clampedY / effectiveHeight)
-                        val db = (frac * 20f - 10f)
-                        val rounded = (db * 2).roundToInt() / 2.0f
-                        if (rounded != value) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            currentOnValueChange(rounded)
+                .clip(RoundedCornerShape(12.dp))
+                .background(surfaceVariantColor.copy(alpha = 0.35f))
+                .border(1.dp, outlineColor, RoundedCornerShape(12.dp))
+                .padding(top = 12.dp, bottom = 8.dp, start = 4.dp, end = 4.dp)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .pointerInput(enabled) {
+                        if (!enabled) return@pointerInput
+                        val leftPad = 28.dp.toPx()
+                        val rightPad = 14.dp.toPx()
+                        val topPad = 16.dp.toPx()
+                        val bottomPad = 22.dp.toPx()
+                        val usableWidth = (size.width - leftPad - rightPad).coerceAtLeast(1f)
+                        val usableHeight = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+                        val bandStep = usableWidth / 9f
+
+                        fun handlePointer(pos: Offset) {
+                            val rawIndex = ((pos.x - leftPad + bandStep / 2f) / bandStep).toInt()
+                            val bandIndex = rawIndex.coerceIn(0, 9)
+                            selectedBandIndex = bandIndex
+
+                            val clampedY = (pos.y - topPad).coerceIn(0f, usableHeight)
+                            val frac = 1f - (clampedY / usableHeight)
+                            val rawDb = frac * 20f - 10f
+                            val roundedDb = (rawDb * 2).roundToInt() / 2.0f
+
+                            if (roundedDb != eqGains.getOrElse(bandIndex) { 0f }) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentOnGainChange(bandIndex, roundedDb)
+                            }
+                        }
+
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            handlePointer(down.position)
+
+                            val pointer = down.id
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == pointer } ?: break
+                                if (!change.pressed) break
+                                change.consume()
+                                handlePointer(change.position)
+                            }
                         }
                     }
-                }
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
-                    detectVerticalDragGestures(
-                        onDragStart = { offset ->
-                            val padding = 8f
-                            val effectiveHeight = (size.height - padding * 2).coerceAtLeast(1f)
-                            val clampedY = (offset.y - padding).coerceIn(0f, effectiveHeight)
-                            val frac = 1f - (clampedY / effectiveHeight)
-                            val db = (frac * 20f - 10f)
-                            val rounded = (db * 2).roundToInt() / 2.0f
-                            if (rounded != value) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                currentOnValueChange(rounded)
-                            }
-                        },
-                        onVerticalDrag = { change, _ ->
-                            change.consume()
-                            val padding = 8f
-                            val effectiveHeight = (size.height - padding * 2).coerceAtLeast(1f)
-                            val clampedY = (change.position.y - padding).coerceIn(0f, effectiveHeight)
-                            val frac = 1f - (clampedY / effectiveHeight)
-                            val db = (frac * 20f - 10f)
-                            val rounded = (db * 2).roundToInt() / 2.0f
-                            if (rounded != value) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                currentOnValueChange(rounded)
-                            }
-                        }
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val padding = 8.dp.toPx()
-                val effectiveHeight = size.height - padding * 2
-                val centerX = size.width / 2f
-                val trackWidth = 8.dp.toPx()
-                val trackRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+            ) {
+                val leftPad = 28.dp.toPx()
+                val rightPad = 14.dp.toPx()
+                val topPad = 16.dp.toPx()
+                val bottomPad = 22.dp.toPx()
+                val usableWidth = (size.width - leftPad - rightPad).coerceAtLeast(1f)
+                val usableHeight = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+                val bandStep = usableWidth / 9f
+                val zeroY = topPad + usableHeight * 0.5f
 
-                // 1. Groove track
+                // Horizontal Reference Grid Lines & dB Labels (+10, 0, -10 dB)
+                val dbMarks = listOf(
+                    10f to topPad,
+                    5f to topPad + usableHeight * 0.25f,
+                    0f to zeroY,
+                    -5f to topPad + usableHeight * 0.75f,
+                    -10f to topPad + usableHeight
+                )
+
+                for ((db, y) in dbMarks) {
+                    val isZero = db == 0f
+                    drawLine(
+                        color = if (isZero) outlineColor.copy(alpha = 0.9f) else outlineColor.copy(alpha = 0.3f),
+                        start = Offset(leftPad, y),
+                        end = Offset(size.width - rightPad, y),
+                        strokeWidth = if (isZero) 1.5.dp.toPx() else 0.75.dp.toPx()
+                    )
+
+                    if (db == 10f || db == 0f || db == -10f) {
+                        val dbText = if (db > 0) "+10" else if (db < 0) "-10" else "0"
+                        val textLayout = textMeasurer.measure(
+                            text = dbText,
+                            style = TextStyle(
+                                fontSize = 9.sp,
+                                fontWeight = if (isZero) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isZero) onSurfaceColor.copy(alpha = 0.8f) else onSurfaceVariantColor.copy(alpha = 0.6f)
+                            )
+                        )
+                        drawText(
+                            textLayoutResult = textLayout,
+                            topLeft = Offset(leftPad - textLayout.size.width - 4.dp.toPx(), y - textLayout.size.height / 2f)
+                        )
+                    }
+                }
+
+                // Vertical Band Guides & Bottom Frequency Labels
+                val points = mutableListOf<Offset>()
+                for (i in 0..9) {
+                    val x = leftPad + i * bandStep
+                    val isSelected = i == selectedBandIndex
+
+                    drawLine(
+                        color = if (isSelected) primaryColor.copy(alpha = 0.35f) else outlineColor.copy(alpha = 0.2f),
+                        start = Offset(x, topPad),
+                        end = Offset(x, topPad + usableHeight),
+                        strokeWidth = if (isSelected) 1.25.dp.toPx() else 0.75.dp.toPx()
+                    )
+
+                    val freqText = FREQ_LABELS[i]
+                    val textLayout = textMeasurer.measure(
+                        text = freqText,
+                        style = TextStyle(
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) primaryColor else onSurfaceVariantColor
+                        )
+                    )
+                    drawText(
+                        textLayoutResult = textLayout,
+                        topLeft = Offset(x - textLayout.size.width / 2f, size.height - bottomPad + 5.dp.toPx())
+                    )
+
+                    val gain = eqGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
+                    val norm = (gain + 10f) / 20f
+                    val y = topPad + (1f - norm) * usableHeight
+                    points.add(Offset(x, y))
+                }
+
+                // Smooth Spline Curve Path
+                val curvePath = Path()
+                curvePath.moveTo(points[0].x, points[0].y)
+                for (i in 0 until 9) {
+                    val p0 = points[i]
+                    val p1 = points[i + 1]
+                    val dx = p1.x - p0.x
+                    val c1 = Offset(p0.x + dx * 0.5f, p0.y)
+                    val c2 = Offset(p1.x - dx * 0.5f, p1.y)
+                    curvePath.cubicTo(c1.x, c1.y, c2.x, c2.y, p1.x, p1.y)
+                }
+
+                // Translucent Area Fill relative to 0 dB Baseline
+                val fillPath = Path()
+                fillPath.moveTo(points[0].x, zeroY)
+                fillPath.lineTo(points[0].x, points[0].y)
+                for (i in 0 until 9) {
+                    val p0 = points[i]
+                    val p1 = points[i + 1]
+                    val dx = p1.x - p0.x
+                    val c1 = Offset(p0.x + dx * 0.5f, p0.y)
+                    val c2 = Offset(p1.x - dx * 0.5f, p1.y)
+                    fillPath.cubicTo(c1.x, c1.y, c2.x, c2.y, p1.x, p1.y)
+                }
+                fillPath.lineTo(points[9].x, zeroY)
+                fillPath.close()
+
+                drawPath(
+                    path = fillPath,
+                    color = primaryColor.copy(alpha = 0.12f)
+                )
+
+                // Draw Smooth Curve Stroke
+                drawPath(
+                    path = curvePath,
+                    color = primaryColor,
+                    style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+                )
+
+                // Draw Band Control Nodes
+                for (i in 0..9) {
+                    val pt = points[i]
+                    val isSelected = i == selectedBandIndex
+
+                    if (isSelected) {
+                        drawCircle(primaryColor.copy(alpha = 0.22f), radius = 10.dp.toPx(), center = pt)
+                        drawCircle(primaryColor, radius = 5.5.dp.toPx(), center = pt)
+                        drawCircle(surfaceColor, radius = 2.dp.toPx(), center = pt)
+                    } else {
+                        drawCircle(surfaceColor, radius = 4.dp.toPx(), center = pt)
+                        drawCircle(outlineColor, radius = 4.dp.toPx(), center = pt, style = Stroke(1.5.dp.toPx()))
+                        drawCircle(primaryColor.copy(alpha = 0.65f), radius = 1.75.dp.toPx(), center = pt)
+                    }
+                }
+
+                // Tooltip Pill above or below Active Node
+                val selPt = points[selectedBandIndex]
+                val selGain = eqGains.getOrElse(selectedBandIndex) { 0f }
+                val gainString = "${if (selGain > 0) "+" else ""}${"%.1f".format(selGain)} dB"
+
+                val badgeText = textMeasurer.measure(
+                    text = gainString,
+                    style = TextStyle(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onSurfaceColor
+                    )
+                )
+
+                val badgePadH = 6.dp.toPx()
+                val badgePadV = 3.dp.toPx()
+                val badgeW = badgeText.size.width + badgePadH * 2
+                val badgeH = badgeText.size.height + badgePadV * 2
+
+                val badgeCenterY = if (selPt.y - 22.dp.toPx() > topPad) {
+                    selPt.y - 18.dp.toPx()
+                } else {
+                    selPt.y + 18.dp.toPx()
+                }
+                val badgeCenterX = selPt.x.coerceIn(leftPad + badgeW / 2f, size.width - rightPad - badgeW / 2f)
+                val badgeTopLeft = Offset(badgeCenterX - badgeW / 2f, badgeCenterY - badgeH / 2f)
+
                 drawRoundRect(
-                    color = surfaceVariantColor,
-                    topLeft = Offset(centerX - trackWidth / 2f, padding),
-                    size = Size(trackWidth, effectiveHeight),
-                    cornerRadius = trackRadius
+                    color = surfaceColor,
+                    topLeft = badgeTopLeft,
+                    size = Size(badgeW, badgeH),
+                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
                 )
                 drawRoundRect(
                     color = outlineColor,
-                    topLeft = Offset(centerX - trackWidth / 2f, padding),
-                    size = Size(trackWidth, effectiveHeight),
-                    cornerRadius = trackRadius,
-                    style = Stroke(width = 1.dp.toPx())
+                    topLeft = badgeTopLeft,
+                    size = Size(badgeW, badgeH),
+                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                    style = Stroke(1.dp.toPx())
                 )
-
-                // 2. Center 0 dB guide line
-                val centerY = padding + effectiveHeight / 2f
-                drawLine(
-                    color = outlineColor,
-                    start = Offset(centerX - trackWidth / 2f - 3.dp.toPx(), centerY),
-                    end = Offset(centerX + trackWidth / 2f + 3.dp.toPx(), centerY),
-                    strokeWidth = 1.dp.toPx()
-                )
-
-                // 3. Normalized level position (-10 to +10 dB)
-                val norm = ((value + 10f) / 20f).coerceIn(0f, 1f)
-                val thumbY = padding + (1f - norm) * effectiveHeight
-
-                // 4. Level indicator fill from 0 dB center line
-                if (isNonZero) {
-                    val fillTop = if (thumbY < centerY) thumbY else centerY
-                    val fillHeight = kotlin.math.abs(centerY - thumbY)
-                    drawRect(
-                        color = accentColor.copy(alpha = if (enabled) 0.85f else 0.4f),
-                        topLeft = Offset(centerX - (trackWidth - 2.dp.toPx()) / 2f, fillTop),
-                        size = Size(trackWidth - 2.dp.toPx(), fillHeight)
-                    )
-                }
-
-                // 5. Tactile Thumb Handle (capsule)
-                val thumbWidth = 24.dp.toPx()
-                val thumbHeight = 7.dp.toPx()
-                val thumbRadius = CornerRadius(3.5.dp.toPx(), 3.5.dp.toPx())
-
-                drawRoundRect(
-                    color = onSurfaceColor,
-                    topLeft = Offset(centerX - thumbWidth / 2f, thumbY - thumbHeight / 2f),
-                    size = Size(thumbWidth, thumbHeight),
-                    cornerRadius = thumbRadius
+                drawText(
+                    textLayoutResult = badgeText,
+                    topLeft = Offset(badgeCenterX - badgeText.size.width / 2f, badgeCenterY - badgeText.size.height / 2f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Frequency Label
-        Text(
-            text = freq,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = onSurfaceVariantColor
-        )
+        // 2. Precision Companion Step Control Bar
+        val selectedGain = eqGains.getOrElse(selectedBandIndex) { 0f }
+        val selectedFreqLabel = FREQ_LABELS.getOrElse(selectedBandIndex) { "" }
+        val formattedFreq = if (selectedFreqLabel.endsWith("k")) {
+            "${selectedFreqLabel.removeSuffix("k")} kHz"
+        } else {
+            "$selectedFreqLabel Hz"
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            color = surfaceVariantColor,
+            border = BorderStroke(1.dp, outlineColor)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Band Navigator: [<]  1 kHz : +3.5 dB  [>]
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (selectedBandIndex > 0) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedBandIndex--
+                            }
+                        },
+                        enabled = enabled && selectedBandIndex > 0,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Text(
+                            text = "<",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedBandIndex > 0) onSurfaceColor else outlineColor
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.widthIn(min = 60.dp)
+                    ) {
+                        Text(
+                            text = formattedFreq,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = onSurfaceVariantColor
+                        )
+                        Text(
+                            text = "${if (selectedGain > 0) "+" else ""}${"%.1f".format(selectedGain)} dB",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = onSurfaceColor
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (selectedBandIndex < 9) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                selectedBandIndex++
+                            }
+                        },
+                        enabled = enabled && selectedBandIndex < 9,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Text(
+                            text = ">",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedBandIndex < 9) onSurfaceColor else outlineColor
+                        )
+                    }
+                }
+
+                // Quick Gain Step Adjusters: [-0.5]  [0 dB]  [+0.5]
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // -0.5 dB
+                    OutlinedButton(
+                        onClick = {
+                            val newG = (selectedGain - 0.5f).coerceAtLeast(-10.0f)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnGainChange(selectedBandIndex, newG)
+                        },
+                        enabled = enabled && selectedGain > -10.0f,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                    ) {
+                        Text(
+                            text = "-0.5",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // 0 dB Reset
+                    OutlinedButton(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnGainChange(selectedBandIndex, 0.0f)
+                        },
+                        enabled = enabled && selectedGain != 0.0f,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                    ) {
+                        Text(
+                            text = "0 dB",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // +0.5 dB
+                    OutlinedButton(
+                        onClick = {
+                            val newG = (selectedGain + 0.5f).coerceAtMost(10.0f)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnGainChange(selectedBandIndex, newG)
+                        },
+                        enabled = enabled && selectedGain < 10.0f,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                    ) {
+                        Text(
+                            text = "+0.5",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

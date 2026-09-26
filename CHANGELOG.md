@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-27
+### Changed
+- Replaced 10-band vertical fader rack with an interactive graphic equalizer spline curve.
+- Eliminated horizontal scroll and overflow, ensuring all 10 frequency bands are visible across all phone viewport widths.
+- Added companion precision fine-tuning control strip with band navigation and step buttons.
+
 ## [1.1.0] - 2026-09-27
 ### Added
 - Segmented mode navigation separating quick controls from the studio equalizer on phone screens.
