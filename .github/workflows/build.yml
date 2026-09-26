@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build APK
+    name: Build & Verify APK
     runs-on: ubuntu-latest
 
     steps:
@@ -31,21 +31,48 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build Optimized Release APK (R8 & Resource Shrinking)
+        run: ./gradlew assembleRelease
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
+
+      - name: Prepare Standardized Release Name
+        run: |
+          mkdir -p release-dist
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VER="${{ github.ref_name }}"
+          else
+            MAJOR=$(grep 'val versionMajor =' app/build.gradle.kts | head -n1 | awk '{print $4}')
+            MINOR=$(grep 'val versionMinor =' app/build.gradle.kts | head -n1 | awk '{print $4}')
+            PATCH=$(grep 'val versionPatch =' app/build.gradle.kts | head -n1 | awk '{print $4}')
+            VER="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          cp app/build/outputs/apk/release/*.apk "release-dist/TOZO-Control-${VER}-AeroSound3.apk"
+          echo "Generated artifact: release-dist/TOZO-Control-${VER}-AeroSound3.apk"
+
+      - name: Upload Optimized Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TOZO-Control-Release-APK
+          path: release-dist/TOZO-Control-*-AeroSound3.apk
+          if-no-files-found: error
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TOZO-Control-Debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Create GitHub Release on Tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: release-dist/TOZO-Control-*-AeroSound3.apk
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false

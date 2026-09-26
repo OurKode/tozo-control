@@ -7,7 +7,7 @@ plugins {
 // Semantic Versioning Configuration (SemVer 2.0.0)
 // Formula: versionCode = MAJOR * 10000 + MINOR * 100 + PATCH
 val versionMajor = 1
-val versionMinor = 0
+val versionMinor = 1
 val versionPatch = 0
 
 android {
@@ -24,7 +24,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -42,9 +44,20 @@ android {
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        excludes += "/META-INF/*.version"
+        excludes += "/META-INF/*.properties"
+        excludes += "/META-INF/*.txt"
       }
     }
 }
+
+base {
+    archivesName.set("TOZO-Control-v$versionMajor.$versionMinor.$versionPatch-AeroSound3")
+}
+
+
+
+
 
 kotlin {
     jvmToolchain(21)

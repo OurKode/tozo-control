@@ -1,61 +1,65 @@
 # Contributing to TOZO Control
 
-Thank you for your interest in contributing to **TOZO Control**! We welcome community contributions to help expand support for more TOZO earbud models, improve UI responsiveness, and optimize Bluetooth Low Energy communication.
+Thank you for your interest in contributing to TOZO Control. Community contributions help expand support for additional TOZO earbud models, improve user interface ergonomics, and refine Bluetooth Low Energy communication.
 
 ---
 
 ## How You Can Contribute
 
-1. **Expanding Device Support**:
-   - Test the app with other TOZO models (e.g. NC2, NC7, NC9, T10, T12, Golden X1, HT2, Open Buds).
-   - If a feature behaves differently on your model, share logcat output with `TozoBleManager` tags or BLE packet captures.
+1. Expanding Device Support:
+   - Test the app with other TOZO models (such as NC2, NC7, NC9, T10, T12, Golden X1, HT2, or Open Buds).
+   - If commands or telemetry behave differently on your model, share logcat output with `TozoBleManager` tags or BLE packet captures.
 
-2. **Bug Reports & Feature Requests**:
-   - Check existing issues before creating a new one.
-   - Provide your Android version, device model, and earbud firmware version.
+2. Bug Reports & Feature Requests:
+   - Check existing issues before opening a new one.
+   - Include your Android version, phone model, and earbud firmware revision.
 
-3. **Code Contributions**:
-   - Fork the repository and create a feature branch (`git checkout -b feature/model-support`).
-   - Follow standard Kotlin and Jetpack Compose best practices.
-   - Maintain the minimalist, bloat-free design philosophy (no third-party tracking, ads, or heavy unnecessary dependencies).
-   - Ensure the project builds cleanly with `./gradlew assembleDebug`.
-   - Open a Pull Request with a clear summary of changes.
+3. Code Contributions:
+   - Fork the repository and create a feature branch (`git checkout -b feature/device-support`).
+   - Follow standard Kotlin and Jetpack Compose conventions.
+   - Maintain the direct hardware communication design (no third-party tracking, ads, or unnecessary dependencies).
+   - Verify that all unit tests pass and the release APK builds cleanly:
+     ```bash
+     ./gradlew testDebugUnitTest assembleRelease
+     ```
+   - Open a Pull Request with a clear description of changes.
 
 ---
 
 ## Versioning & Release Guidelines
 
-This project adheres to **[Semantic Versioning 2.0.0](https://semver.org/)** and Android versioning conventions:
+This project adheres to [Semantic Versioning 2.0.0](https://semver.org/) and the project versioning specification in [VERSIONING.md](VERSIONING.md):
 
 ### 1. Version Codes & Names (`app/build.gradle.kts`)
-- **`versionCode` (Integer)**: An incrementing counter (1, 2, 3...) required by Android OS and package installers (F-Droid, GitHub Releases). **Must be incremented by +1 for every public build or release.**
-- **`versionName` (String)**: SemVer format `MAJOR.MINOR.PATCH` (e.g., `1.0.0`):
-  - **`MAJOR`**: Incompatible breaking changes, fundamental architectural rewrites, or bumping `minSdk` that drops older Android versions.
-  - **`MINOR`**: New features added in a backward-compatible manner (e.g., adding support for a new TOZO model, new DSP presets, auto-reconnect).
-  - **`PATCH`**: Backward-compatible bug fixes, BLE transmission stabilization, or minor UI adjustments.
+- `versionCode` (Integer): Deterministic formula defined in `build.gradle.kts`:
+  `(versionMajor * 10000) + (versionMinor * 100) + versionPatch`
+- `versionName` (String): Standard SemVer format `MAJOR.MINOR.PATCH`:
+  - `MAJOR`: Incompatible breaking changes or bumping `minSdk`.
+  - `MINOR`: Backward-compatible new features (for example, adding support for a new TOZO model or new UI panels).
+  - `PATCH`: Backward-compatible bug fixes, BLE stability improvements, or minor layout adjustments.
 
 ### 2. Changelog
 - When submitting features or bug fixes, update `CHANGELOG.md` under the `[Unreleased]` section.
-- Follow the [Keep a Changelog](https://keepachangelog.com/) structure (`Added`, `Changed`, `Fixed`, `Removed`, `Security`).
+- Follow the [Keep a Changelog](https://keepachangelog.com/) structure (`Added`, `Changed`, `Fixed`, `Removed`).
 
 ### 3. Commit Conventions
-We recommend Conventional Commits for clear Git history:
+We recommend Conventional Commits for a clear Git history:
 - `feat: <description>` for new features
 - `fix: <description>` for bug fixes
 - `refactor: <description>` for refactoring without behavior change
-- `docs: <description>` for documentation changes
+- `docs: <description>` for documentation updates
 - `chore: <description>` for build tooling, dependencies, or configuration
 
 ### 4. Git Tagging & Automated Releases
-Releases are cut by creating and pushing a Git tag matching `v*`:
+Releases are created by pushing a Git tag matching `v*`:
 ```bash
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
 ```
-Pushing a release tag automatically triggers the GitHub Actions CI workflow to compile and attach release APKs to the GitHub Releases page.
+Pushing a release tag automatically triggers GitHub Actions to run tests, compile the optimized release APK, and publish it to GitHub Releases.
 
 ---
 
 ## Code of Conduct
 
-Please treat everyone with respect, kindness, and constructive feedback. Let's build a clean, respectful open-source community together!
+Please treat everyone with respect and constructive feedback.

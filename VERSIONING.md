@@ -1,12 +1,12 @@
 # Application Versioning Specification
 
-This document defines the official versioning policy, mathematical formulas, and increment rules for **TOZO Control**.
+This document defines the versioning policy, mathematical formulas, and increment rules for TOZO Control.
 
 ---
 
 ## 1. Core Principles
 
-TOZO Control follows **[Semantic Versioning 2.0.0](https://semver.org/)** (`MAJOR.MINOR.PATCH`) paired with a deterministic Android `versionCode` calculation formula.
+TOZO Control follows [Semantic Versioning 2.0.0](https://semver.org/) (`MAJOR.MINOR.PATCH`) paired with a deterministic Android `versionCode` calculation formula.
 
 ```
        v 1 . 2 . 4
@@ -23,7 +23,7 @@ Both version attributes are defined in [`app/build.gradle.kts`](app/build.gradle
 
 ```kotlin
 val versionMajor = 1
-val versionMinor = 0
+val versionMinor = 1
 val versionPatch = 0
 
 defaultConfig {
@@ -36,26 +36,25 @@ defaultConfig {
 
 | Identifier | Type | Formula | Description |
 | :--- | :--- | :--- | :--- |
-| **`versionName`** | String | `"${MAJOR}.${MINOR}.${PATCH}"` | Human-readable version string shown in UI, logs, and GitHub Releases. |
-| **`versionCode`** | Integer | `(MAJOR * 10000) + (MINOR * 100) + PATCH` | Monotonically increasing 32-bit integer for Android OS and package managers. |
+| `versionName` | String | `"${MAJOR}.${MINOR}.${PATCH}"` | Version string shown in UI, logs, and GitHub Releases. |
+| `versionCode` | Integer | `(MAJOR * 10000) + (MINOR * 100) + PATCH` | Monotonically increasing 32-bit integer for Android OS and package managers. |
 
-### Why this Formula?
-- **Allocates 2 digits for Patch** ($00 \dots 99$).
-- **Allocates 2 digits for Minor** ($00 \dots 99$).
-- **Allocates remaining upper digits for Major** ($1 \dots 214748$).
-- **Strictly Monotonic**: Any bump to Major, Minor, or Patch mathematically guarantees a higher `versionCode`, ensuring that Android OS, Google Play, and F-Droid will always recognize the build as an upgrade.
+### Formula Structure
+- Allocates 2 digits for Patch (00 to 99).
+- Allocates 2 digits for Minor (00 to 99).
+- Allocates remaining upper digits for Major (1 to 214748).
+- Strictly monotonic: Any increment to Major, Minor, or Patch produces a higher `versionCode`, ensuring package managers recognize updates.
 
 ### Version Mapping Reference
 
 | `versionName` | `MAJOR` | `MINOR` | `PATCH` | `versionCode` | Classification |
 | :---: | :---: | :---: | :---: | :---: | :--- |
-| **`1.0.0`** | 1 | 0 | 0 | `10000` | Initial open-source release |
-| **`1.0.1`** | 1 | 0 | 1 | `10001` | Patch: BLE reconnection fix |
-| **`1.0.2`** | 1 | 0 | 2 | `10002` | Patch: UI padding adjustment |
-| **`1.1.0`** | 1 | 1 | 0 | `10100` | Minor: Add TOZO NC9 device support |
-| **`1.1.1`** | 1 | 1 | 1 | `10101` | Patch: Fix NC9 opcode parsing |
-| **`1.2.0`** | 1 | 2 | 0 | `10200` | Minor: Add custom preset import/export |
-| **`2.0.0`** | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
+| `1.0.0` | 1 | 0 | 0 | `10000` | Initial open-source release |
+| `1.0.1` | 1 | 0 | 1 | `10001` | Patch: BLE reconnection fix |
+| `1.0.2` | 1 | 0 | 2 | `10002` | Patch: UI padding adjustment |
+| `1.1.0` | 1 | 1 | 0 | `10100` | Minor: UI redesign, R8 shrinking, tablet layout |
+| `1.2.0` | 1 | 2 | 0 | `10200` | Minor: Add custom preset import/export |
+| `2.0.0` | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
 
 ---
 
@@ -64,38 +63,38 @@ defaultConfig {
 ### A. MAJOR Bump (`X.0.0`)
 Increment `versionMajor += 1`, reset `versionMinor = 0`, reset `versionPatch = 0`.
 
-**When to use:**
-- **Breaking platform changes**: Raising `minSdk` (e.g. dropping older Android OS releases).
-- **Breaking data schema**: Stored preferences or database models change without backward-compatible automatic migration.
-- **Architectural rewrite**: Complete refactoring of the BLE communication stack or state management pipeline.
-- **Removal of functionality**: Dropping support for previously supported earbud models or removing core capabilities.
+When to use:
+- Breaking platform changes: Raising `minSdk` to drop older Android releases.
+- Breaking data schema: Stored preferences or data models change without backward-compatible migration.
+- Architectural rewrite: Fundamental overhaul of the BLE stack or state management pipeline.
+- Removal of functionality: Dropping support for previously supported earbud models.
 
 ---
 
 ### B. MINOR Bump (`1.X.0`)
 Increment `versionMinor += 1`, reset `versionPatch = 0`.
 
-**When to use:**
-- **New Device Support**: Adding reverse-engineered protocol support for a new TOZO model (e.g., NC2, NC7, NC9, T10, Golden X1, HT2, Open Buds).
-- **New Features**:
-  - Adding new DSP presets or custom EQ import/export.
+When to use:
+- New device support: Adding protocol support for a new TOZO model.
+- New features:
+  - Adding DSP presets or custom EQ curve import/export.
   - Adding homescreen widgets or quick settings tiles.
   - Adding charging case telemetry or Bluetooth audio codec indicators.
-- **Enhancements**: Non-breaking additions to UI cards or telemetry meters.
+- User interface enhancements: Significant layout redesigns or new functional panels.
 
 ---
 
 ### C. PATCH Bump (`1.0.X`)
 Increment `versionPatch += 1`.
 
-**When to use:**
-- **Bug Fixes**:
+When to use:
+- Bug fixes:
   - Resolving BLE disconnects, GATT 133 timeouts, or MTU negotiation errors.
-  - Fixing DSP 24-byte checksum calculation or rounding errors in EQ sliders.
-  - Fixing UI rendering glitches, layout overflows, or dark/light theme flickering.
-- **Performance & Stability**:
-  - Tuning fader rate-limiting/cooldown buffers.
-- **Maintenance**:
+  - Fixing DSP 24-byte checksum calculation or rounding errors in sliders.
+  - Fixing UI rendering glitches, layout overflows, or dark/light theme switching.
+- Performance and stability:
+  - Tuning fader rate-limiting or cooldown buffers.
+- Maintenance:
   - Updating internal dependencies (Gradle, Compose, Kotlin) without API changes.
   - Fixing typos, documentation, or string translations.
 
@@ -105,30 +104,18 @@ Increment `versionPatch += 1`.
 
 When cutting a new release:
 
-1. **Update Version Variables**:
-   In [`app/build.gradle.kts`](app/build.gradle.kts), update `versionMajor`, `versionMinor`, or `versionPatch` according to the decision matrix above.
-
-2. **Update Changelog**:
-   In [`CHANGELOG.md`](CHANGELOG.md), move items from `[Unreleased]` into a new section:
-   ```markdown
-   ## [1.1.0] - YYYY-MM-DD
-   ### Added
-   - Support for TOZO NC9 active noise cancellation.
-   ```
-
-3. **Verify Build & Tests**:
+1. Update version variables in [`app/build.gradle.kts`](app/build.gradle.kts) according to the decision matrix above.
+2. Update [`CHANGELOG.md`](CHANGELOG.md) by moving items from `[Unreleased]` into a dated release section.
+3. Verify that all tests pass and the release APK builds:
    ```bash
-   ./gradlew test
+   ./gradlew testDebugUnitTest
    ./gradlew assembleRelease
    ```
-
-4. **Commit & Tag**:
+4. Commit and tag:
    ```bash
    git add app/build.gradle.kts CHANGELOG.md
    git commit -m "chore(release): bump version to 1.1.0"
    git tag -a v1.1.0 -m "Release v1.1.0"
    git push origin main --tags
    ```
-
-5. **Automated CI/CD**:
-   GitHub Actions will automatically pick up the `v*` tag, build the signed APKs, and publish them to GitHub Releases.
+5. GitHub Actions will automatically detect the `v*` tag, build the optimized release APK, and publish it to GitHub Releases.

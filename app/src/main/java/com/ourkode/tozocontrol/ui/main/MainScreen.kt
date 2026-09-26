@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -16,8 +15,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,8 +31,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,12 +47,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.ourkode.tozocontrol.data.NoiseMode
-import com.ourkode.tozocontrol.data.TozoBleManager
 import com.ourkode.tozocontrol.theme.*
 import kotlin.math.roundToInt
 
 // ============================================================
-// Utilitarian Minimalist Constants & Sound Profiles
+// Equalizer Constants & Sound Profiles
 // ============================================================
 
 val FREQ_LABELS = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
@@ -63,6 +65,11 @@ val PRESET_MAP = mapOf(
 )
 
 val PRESET_NAMES = listOf("Flat", "Bass Boost", "Treble Boost", "Vocal Focus", "Acoustic", "Custom")
+
+private enum class MobileScreenTab(val label: String) {
+    CONTROLS("Controls"),
+    EQUALIZER("Equalizer")
+}
 
 @Composable
 fun MainScreen(
@@ -104,7 +111,7 @@ fun MainScreen(
     var activePreset by remember { mutableStateOf(savedPreset) }
     var eqGains by remember { mutableStateOf(savedEq) }
     var customGains by remember { mutableStateOf(savedCustom) }
-    var hasUserEditedEq by remember { mutableStateOf(true) }
+    var selectedTab by remember { mutableStateOf(MobileScreenTab.CONTROLS) }
 
     fun persistEqState(preset: String, eq: List<Float>, custom: List<Float>) {
         prefs.edit()
@@ -114,7 +121,7 @@ fun MainScreen(
             .apply()
     }
 
-    // Sync hardware EQ curve directly from TWS
+    // Sync hardware EQ curve directly from TWS notifications
     LaunchedEffect(currentEq) {
         if (currentEq.size == 10) {
             val matchingPreset = PRESET_MAP.entries.firstOrNull { (_, presetGains) ->
@@ -134,7 +141,7 @@ fun MainScreen(
         }
     }
 
-    // BLE Permissions Handshake & Auto-Connect
+    // BLE Permissions Handshake
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
@@ -162,748 +169,592 @@ fun MainScreen(
         }
     }
 
-    // Warm Bone / Utilitarian Canvas
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        val isWideScreen = maxWidth >= 600.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
             // ============================================================
-            // 1. EDITORIAL HEADER & WORKSPACE NAVIGATION
+            // 1. TOP APP BAR (ACCESSIBLE CONTROLS, ZERO DESKTOP KEYS)
             // ============================================================
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Eyebrow("AUDIO HARDWARE INTERFACE")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (isConnected && connectedDeviceName.isNotBlank()) connectedDeviceName else "TOZO AeroSound",
-                            style = MaterialTheme.typography.displayLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val macDisplay = if (connectedDeviceAddress.isNotBlank()) connectedDeviceAddress else "AUTO-DETECT"
-                        Text(
-                            text = "Model A3  •  MAC $macDisplay",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            TopDeviceBar(
+                deviceName = if (isConnected && connectedDeviceName.isNotBlank()) connectedDeviceName else "TOZO AeroSound 3",
+                macAddress = if (connectedDeviceAddress.isNotBlank()) connectedDeviceAddress else "Auto-Discovery",
+                isConnected = isConnected,
+                isConnecting = isConnecting,
+                statusText = statusText,
+                isDark = isDark,
+                onToggleTheme = onToggleTheme,
+                onConnectClick = {
+                    if (isConnected || isConnecting) {
+                        viewModel.disconnect()
+                    } else {
+                        viewModel.connect()
                     }
-
-                    // Keystroke micro-UI for theme switching
-                    KeystrokeChip(
-                        text = if (isDark) "LIGHT [T]" else "DARK [T]",
-                        onClick = onToggleTheme
-                    )
                 }
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Connection Status & Primary Action Button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            MinimalBadge(
-                                text = when {
-                                    isConnected -> "ONLINE"
-                                    isConnecting -> "CONNECTING"
-                                    else -> "OFFLINE"
-                                },
-                                isSuccess = isConnected || isConnecting,
-                                isDark = isDark
-                            )
-                            Text(
-                                text = when {
-                                    isConnected -> "BLE 5.3 LINKED"
-                                    isConnecting -> statusText
-                                    else -> if (statusText.isNotBlank() && statusText != "Ready") statusText else "DISCONNECTED"
-                                },
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    MinimalButton(
-                        text = when {
-                            isConnecting -> "CONNECTING..."
-                            isConnected -> "DISCONNECT"
-                            else -> "CONNECT"
-                        },
-                        isLoading = isConnecting,
-                        enabled = true,
-                        onClick = {
-                            if (isConnected || isConnecting) {
-                                viewModel.disconnect()
-                            } else {
-                                viewModel.connect()
-                            }
-                        },
-                        isPrimary = !isConnected,
-                        modifier = Modifier.defaultMinSize(minWidth = 124.dp)
-                    )
-                }
-            }
-
-            // Hairline separator
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outline,
                 thickness = 1.dp
             )
 
             // ============================================================
-            // 2. BATTERY TELEMETRY BENTO POD
+            // 2. ADAPTIVE CONTENT SURFACE
             // ============================================================
-            BentoCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Eyebrow("BATTERY TELEMETRY")
-                    Text(
-                        text = if (isConnected) "FIRMWARE $firmwareVersion" else "OFFLINE",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 0.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MinimalBatteryPod(
-                        unitName = "LEFT EARBUD",
-                        percentage = batteryLeft,
-                        isConnected = isConnected,
-                        isDark = isDark,
-                        modifier = Modifier.weight(1f)
-                    )
-                    MinimalBatteryPod(
-                        unitName = "RIGHT EARBUD",
-                        percentage = batteryRight,
-                        isConnected = isConnected,
-                        isDark = isDark,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            // ============================================================
-            // 3. LOW LATENCY DSP CARD (WITH RATE LIMITING)
-            // ============================================================
-            BentoCard {
+            if (isWideScreen) {
+                // Wide Screen (Tablet / Landscape / Foldable): Side-by-Side Studio Layout
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (isConnected) 1f else 0.72f),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Eyebrow("LATENCY BUFFER")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            if (isGameModePending) {
-                                MinimalBadge(
-                                    text = "SYNCING...",
-                                    isSuccess = true,
-                                    isDark = isDark
-                                )
-                            } else if (isGameMode && isConnected) {
-                                MinimalBadge(
-                                    text = "45MS DSP",
-                                    isSuccess = true,
-                                    isDark = isDark
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Low Latency Audio",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = if (!isConnected) {
-                                "Connect earbuds to engage hardware buffer"
-                            } else if (isGameModePending) {
-                                "Switching transmission buffer parameter..."
-                            } else if (isGameMode) {
-                                "Synchronous transmission buffer engaged for gaming and video"
-                            } else {
-                                "Standard audio buffer engaged for baseline battery longevity"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Switch(
-                        checked = isGameMode && isConnected,
-                        enabled = isConnected && !isGameModePending,
-                        onCheckedChange = { if (isConnected && !isGameModePending) viewModel.setGameMode(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.surface,
-                            checkedTrackColor = MaterialTheme.colorScheme.onSurface,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.surface,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.outline,
-                            disabledCheckedThumbColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            disabledCheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            disabledUncheckedThumbColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            disabledUncheckedTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                        )
-                    )
-                }
-            }
-
-            // ============================================================
-            // 4. ACOUSTIC ISOLATION PROFILES (WITH RATE LIMITING)
-            // ============================================================
-            BentoCard {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (isConnected) 1f else 0.72f)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Eyebrow("ACOUSTIC ENVIRONMENT")
-                            if (isNoisePending) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                MinimalBadge(
-                                    text = "SWITCHING...",
-                                    isSuccess = true,
-                                    isDark = isDark
-                                )
-                            }
-                        }
-                        Text(
-                            text = "PHASE CANCELLATION",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Noise Isolation Profile",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Select external microphone feedback filtering parameter.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    val noiseModes = listOf(
-                        Triple(NoiseMode.ANC, "ANC", "Shield"),
-                        Triple(NoiseMode.TRANSPARENCY, "Pass", "Aware"),
-                        Triple(NoiseMode.LEISURE, "Leisure", "Soft Cut"),
-                        Triple(NoiseMode.REDUCE_WIND, "Wind", "Aero"),
-                        Triple(NoiseMode.NORMAL, "Normal", "Direct")
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        noiseModes.forEach { (mode, label, sub) ->
-                            val isSelected = isConnected && currentNoiseMode == mode
-                            val tileEnabled = isConnected && !isNoisePending
-
-                            MinimalNoiseTile(
-                                title = label,
-                                subtitle = if (isSelected && isNoisePending) "WAIT..." else sub,
-                                isSelected = isSelected,
-                                enabled = tileEnabled,
-                                onClick = {
-                                    if (isConnected && !isNoisePending) {
-                                        viewModel.setNoiseMode(mode)
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ============================================================
-            // 5. 10-BAND HARDWARE DSP EQUALIZER (CUSTOMIZABLE + RATE LIMITING)
-            // ============================================================
-            BentoCard {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .alpha(if (isConnected) 1f else 0.85f)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Eyebrow("HARDWARE DSP FILTER")
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Acoustic Equalizer",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (activePreset == "Custom" && eqGains.any { it != 0f }) {
-                                KeystrokeChip(
-                                    text = "FLAT",
-                                    onClick = {
-                                        val flat = List(10) { 0f }
-                                        eqGains = flat
-                                        customGains = flat
-                                        hasUserEditedEq = true
-                                        persistEqState("Flat", flat, flat)
-                                        if (isConnected && !isEqPending) {
-                                            viewModel.setEqGains(flat)
-                                        }
-                                    }
-                                )
-                            }
-
-                            MinimalButton(
-                                text = if (isEqPending) "APPLYING..." else "APPLY PROFILE",
-                                isLoading = isEqPending,
-                                enabled = isConnected && !isEqPending,
-                                onClick = {
-                                    if (isConnected && !isEqPending) {
-                                        persistEqState(activePreset, eqGains, customGains)
-                                        viewModel.setEqGains(eqGains)
-                                    }
-                                },
-                                isPrimary = true
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "10-band studio frequency response (-10.0 dB to +10.0 dB). Tap or drag to customize.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Preset capsule selector (including "Custom") - Smooth horizontal scroll
-                    Row(
+                    // Left Column: Controls & Telemetry
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        PRESET_NAMES.forEach { presetName ->
-                            val isSelected = activePreset == presetName
-                            val bg = if (isSelected) {
-                                if (isDark) PastelBlueBgDark else PastelBlueBg
-                            } else {
-                                Color.Transparent
-                            }
-                            val borderCol = if (isSelected) {
-                                if (isDark) PastelBlueTextDark else PastelBlueText
-                            } else {
-                                MaterialTheme.colorScheme.outline
-                            }
-                            val fg = if (isSelected) {
-                                if (isDark) PastelBlueTextDark else PastelBlueText
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                        BatteryTelemetryPanel(
+                            batteryLeft = batteryLeft,
+                            batteryRight = batteryRight,
+                            firmwareVersion = firmwareVersion,
+                            isConnected = isConnected
+                        )
 
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(9999.dp))
-                                    .background(bg)
-                                    .border(1.dp, borderCol, RoundedCornerShape(9999.dp))
-                                    .clickable {
-                                        if (presetName == "Custom") {
-                                            activePreset = "Custom"
-                                            eqGains = customGains
-                                            hasUserEditedEq = true
-                                            persistEqState("Custom", customGains, customGains)
-                                            if (isConnected && !isEqPending) {
-                                                viewModel.setEqGains(customGains)
-                                            }
-                                        } else {
-                                            activePreset = presetName
-                                            val gains = PRESET_MAP[presetName] ?: List(10) { 0f }
-                                            eqGains = gains
-                                            hasUserEditedEq = true
-                                            persistEqState(presetName, gains, customGains)
-                                            if (isConnected && !isEqPending) {
-                                                viewModel.setEqGains(gains)
-                                            }
-                                        }
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 7.dp)
-                            ) {
-                                Text(
-                                    text = presetName,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = fg,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
+                        NoiseIsolationPanel(
+                            currentMode = currentNoiseMode,
+                            isConnected = isConnected,
+                            isPending = isNoisePending,
+                            onSelectMode = { viewModel.setNoiseMode(it) }
+                        )
+
+                        LowLatencyPanel(
+                            isGameMode = isGameMode,
+                            isConnected = isConnected,
+                            isPending = isGameModePending,
+                            onToggle = { viewModel.setGameMode(it) }
+                        )
+
+                        AppFooter()
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // 10 Tactile Vertical Faders Rack (Interactive Canvas + Tap & Drag)
-                    Row(
+                    // Right Column: 10-Band Studio Equalizer
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(190.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .weight(1.35f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        eqGains.forEachIndexed { idx, gain ->
-                            MinimalFaderColumn(
-                                freq = FREQ_LABELS[idx],
-                                value = gain,
-                                enabled = true, // Always editable!
-                                onValueChange = { newVal ->
-                                    val updated = eqGains.toMutableList()
-                                    updated[idx] = newVal
-                                    eqGains = updated
-                                    customGains = updated
+                        EqualizerPanel(
+                            activePreset = activePreset,
+                            eqGains = eqGains,
+                            isConnected = isConnected,
+                            isPending = isEqPending,
+                            onSelectPreset = { presetName ->
+                                if (presetName == "Custom") {
                                     activePreset = "Custom"
-                                    hasUserEditedEq = true
-                                    persistEqState("Custom", updated, updated)
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
+                                    eqGains = customGains
+                                    persistEqState("Custom", customGains, customGains)
+                                    if (isConnected && !isEqPending) {
+                                        viewModel.setEqGains(customGains)
+                                    }
+                                } else {
+                                    activePreset = presetName
+                                    val gains = PRESET_MAP[presetName] ?: List(10) { 0f }
+                                    eqGains = gains
+                                    persistEqState(presetName, gains, customGains)
+                                    if (isConnected && !isEqPending) {
+                                        viewModel.setEqGains(gains)
+                                    }
+                                }
+                            },
+                            onResetFlat = {
+                                val flat = List(10) { 0f }
+                                eqGains = flat
+                                customGains = flat
+                                activePreset = "Flat"
+                                persistEqState("Flat", flat, flat)
+                                if (isConnected && !isEqPending) {
+                                    viewModel.setEqGains(flat)
+                                }
+                            },
+                            onApply = {
+                                persistEqState(activePreset, eqGains, customGains)
+                                viewModel.setEqGains(eqGains)
+                            },
+                            onGainChange = { index, value ->
+                                val updated = eqGains.toMutableList()
+                                updated[index] = value
+                                eqGains = updated
+                                customGains = updated
+                                activePreset = "Custom"
+                                persistEqState("Custom", updated, updated)
+                            }
+                        )
+                    }
+                }
+            } else {
+                // Phone View: Segmented Tab Bar (Controls vs Equalizer)
+                // Eliminates gesture collision between vertical page scrolling and fader sliders
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    SegmentedModeSelector(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(200)) togetherWith
+                            fadeOut(animationSpec = tween(200))
+                        },
+                        label = "tab_content",
+                        modifier = Modifier.fillMaxSize()
+                    ) { targetTab ->
+                        when (targetTab) {
+                            MobileScreenTab.CONTROLS -> {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    BatteryTelemetryPanel(
+                                        batteryLeft = batteryLeft,
+                                        batteryRight = batteryRight,
+                                        firmwareVersion = firmwareVersion,
+                                        isConnected = isConnected
+                                    )
+
+                                    NoiseIsolationPanel(
+                                        currentMode = currentNoiseMode,
+                                        isConnected = isConnected,
+                                        isPending = isNoisePending,
+                                        onSelectMode = { viewModel.setNoiseMode(it) }
+                                    )
+
+                                    LowLatencyPanel(
+                                        isGameMode = isGameMode,
+                                        isConnected = isConnected,
+                                        isPending = isGameModePending,
+                                        onToggle = { viewModel.setGameMode(it) }
+                                    )
+
+                                    AppFooter()
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+                            }
+                            MobileScreenTab.EQUALIZER -> {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    EqualizerPanel(
+                                        activePreset = activePreset,
+                                        eqGains = eqGains,
+                                        isConnected = isConnected,
+                                        isPending = isEqPending,
+                                        onSelectPreset = { presetName ->
+                                            if (presetName == "Custom") {
+                                                activePreset = "Custom"
+                                                eqGains = customGains
+                                                persistEqState("Custom", customGains, customGains)
+                                                if (isConnected && !isEqPending) {
+                                                    viewModel.setEqGains(customGains)
+                                                }
+                                            } else {
+                                                activePreset = presetName
+                                                val gains = PRESET_MAP[presetName] ?: List(10) { 0f }
+                                                eqGains = gains
+                                                persistEqState(presetName, gains, customGains)
+                                                if (isConnected && !isEqPending) {
+                                                    viewModel.setEqGains(gains)
+                                                }
+                                            }
+                                        },
+                                        onResetFlat = {
+                                            val flat = List(10) { 0f }
+                                            eqGains = flat
+                                            customGains = flat
+                                            activePreset = "Flat"
+                                            persistEqState("Flat", flat, flat)
+                                            if (isConnected && !isEqPending) {
+                                                viewModel.setEqGains(flat)
+                                            }
+                                        },
+                                        onApply = {
+                                            persistEqState(activePreset, eqGains, customGains)
+                                            viewModel.setEqGains(eqGains)
+                                        },
+                                        onGainChange = { index, value ->
+                                            val updated = eqGains.toMutableList()
+                                            updated[index] = value
+                                            eqGains = updated
+                                            customGains = updated
+                                            activePreset = "Custom"
+                                            persistEqState("Custom", updated, updated)
+                                        }
+                                    )
+
+                                    AppFooter()
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+                            }
                         }
                     }
                 }
             }
-
-            // ============================================================
-            // 6. EDITORIAL FOOTER & HARDWARE SPECIFICATIONS
-            // ============================================================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "TOZO CONTROL  •  SYSTEM REV 1.3.8",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    letterSpacing = 0.8.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "GATT Bluetooth LE Acoustic Controller",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }
 
 // ============================================================
-// Utilitarian Minimalist Architectural Components
+// 1. TOP APP BAR & CONNECTION HEADER
 // ============================================================
 
 @Composable
-fun BentoCard(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-fun Eyebrow(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    Text(
-        text = text,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.8.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier
-    )
-}
-
-@Composable
-fun MinimalBadge(
-    text: String,
-    isSuccess: Boolean,
+private fun TopDeviceBar(
+    deviceName: String,
+    macAddress: String,
+    isConnected: Boolean,
+    isConnecting: Boolean,
+    statusText: String,
     isDark: Boolean,
+    onToggleTheme: () -> Unit,
+    onConnectClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (isSuccess) {
-        if (isDark) PastelGreenBgDark else PastelGreenBg
-    } else {
-        if (isDark) PastelRedBgDark else PastelRedBg
-    }
-    val fg = if (isSuccess) {
-        if (isDark) PastelGreenTextDark else PastelGreenText
-    } else {
-        if (isDark) PastelRedTextDark else PastelRedText
-    }
-
-    Box(
+    Column(
         modifier = modifier
-            .clip(RoundedCornerShape(9999.dp))
-            .background(bg)
-            .padding(horizontal = 9.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.5.sp,
-            color = fg
-        )
-    }
-}
-
-@Composable
-fun KeystrokeChip(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-fun MinimalButton(
-    text: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    isLoading: Boolean = false,
-    isPrimary: Boolean = true,
-    modifier: Modifier = Modifier
-) {
-    val bgColor = if (isPrimary) {
-        if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceVariant
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-    val textColor = if (isPrimary) {
-        if (enabled) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val borderStroke = if (isPrimary && enabled) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .then(if (borderStroke != null) Modifier.border(borderStroke, RoundedCornerShape(6.dp)) else Modifier)
-            .background(bgColor)
-            .clickable(enabled = enabled && !isLoading, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(11.dp),
-                    strokeWidth = 1.5.dp,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = deviceName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val dotColor = when {
+                        isConnected -> StatusGreen
+                        isConnecting -> StatusAmber
+                        else -> StatusMuted
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
+                    )
+                    Text(
+                        text = when {
+                            isConnected -> "BLE 5.3 Linked  •  $macAddress"
+                            isConnecting -> if (statusText.isNotBlank()) statusText else "Connecting..."
+                            else -> "Disconnected"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Accessible Theme Switcher (48x48dp touch target)
+                ThemeIconButton(
+                    isDark = isDark,
+                    onClick = onToggleTheme
+                )
+
+                // Primary Connection Button (Min height 44dp, touch target 48dp)
+                Button(
+                    onClick = onConnectClick,
+                    enabled = true,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isConnected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                        contentColor = if (isConnected) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                ) {
+                    if (isConnecting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Connecting",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        Text(
+                            text = if (isConnected) "Disconnect" else "Connect",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeIconButton(
+    isDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(20.dp)) {
+            val strokeColor = if (isDark) Color(0xFFF4F4F2) else Color(0xFF111111)
+            val center = Offset(size.width / 2f, size.height / 2f)
+
+            if (isDark) {
+                // Sun Icon (tap to switch to light)
+                val radius = 5.dp.toPx()
+                drawCircle(color = strokeColor, radius = radius, center = center)
+
+                val rayLen = 2.5.dp.toPx()
+                val rayStart = radius + 2.dp.toPx()
+                val rayEnd = rayStart + rayLen
+
+                for (i in 0 until 8) {
+                    val angle = (i * 45f) * (Math.PI / 180f).toFloat()
+                    val cosA = kotlin.math.cos(angle)
+                    val sinA = kotlin.math.sin(angle)
+                    drawLine(
+                        color = strokeColor,
+                        start = Offset(center.x + cosA * rayStart, center.y + sinA * rayStart),
+                        end = Offset(center.x + cosA * rayEnd, center.y + sinA * rayEnd),
+                        strokeWidth = 1.5.dp.toPx()
+                    )
+                }
+            } else {
+                // Crescent Moon Icon (tap to switch to dark)
+                val path = Path().apply {
+                    moveTo(size.width * 0.75f, size.height * 0.15f)
+                    cubicTo(
+                        size.width * 0.25f, size.height * 0.25f,
+                        size.width * 0.25f, size.height * 0.75f,
+                        size.width * 0.75f, size.height * 0.85f
+                    )
+                    cubicTo(
+                        size.width * 0.45f, size.height * 0.75f,
+                        size.width * 0.45f, size.height * 0.25f,
+                        size.width * 0.75f, size.height * 0.15f
+                    )
+                    close()
+                }
+                drawPath(path = path, color = strokeColor)
+            }
+        }
+    }
+}
+
+// ============================================================
+// 2. SEGMENTED MODE SELECTOR (PHONE VIEW)
+// ============================================================
+
+@Composable
+private fun SegmentedModeSelector(
+    selectedTab: MobileScreenTab,
+    onTabSelected: (MobileScreenTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        MobileScreenTab.entries.forEach { tab ->
+            val isSelected = selectedTab == tab
+            val bg = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent
+            val textColor = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(bg)
+                    .clickable { onTabSelected(tab) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = tab.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                     color = textColor
                 )
-                Spacer(modifier = Modifier.width(6.dp))
             }
+        }
+    }
+}
+
+// ============================================================
+// 3. BATTERY TELEMETRY PANEL
+// ============================================================
+
+@Composable
+private fun BatteryTelemetryPanel(
+    batteryLeft: Int,
+    batteryRight: Int,
+    firmwareVersion: String,
+    isConnected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = text,
-                fontFamily = FontFamily.SansSerif,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.5.sp,
-                color = if (enabled) textColor else textColor.copy(alpha = 0.6f),
-                maxLines = 1,
-                softWrap = false
+                text = "Battery Status",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (isConnected && firmwareVersion.isNotBlank()) {
+                Text(
+                    text = "FW $firmwareVersion",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            EarbudBatteryPod(
+                channelLabel = "Left Earbud",
+                percentage = batteryLeft,
+                isConnected = isConnected,
+                modifier = Modifier.weight(1f)
+            )
+            EarbudBatteryPod(
+                channelLabel = "Right Earbud",
+                percentage = batteryRight,
+                isConnected = isConnected,
+                modifier = Modifier.weight(1f)
             )
         }
     }
 }
 
 @Composable
-fun MinimalBatteryPod(
-    unitName: String,
+private fun EarbudBatteryPod(
+    channelLabel: String,
     percentage: Int,
     isConnected: Boolean,
-    isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = if (isConnected) (percentage.coerceIn(0, 100) / 100f) else 0f,
         animationSpec = tween(500, easing = FastOutSlowInEasing),
-        label = "battery_progress"
+        label = "battery_fill"
     )
 
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-            .padding(14.dp)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = unitName,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // Small muted dot
-                val dotColor = if (isConnected && percentage > 20) {
-                    if (isDark) PastelGreenTextDark else PastelGreenText
-                } else if (isConnected) {
-                    if (isDark) PastelRedTextDark else PastelRedText
-                } else {
-                    MaterialTheme.colorScheme.outline
-                }
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                )
-            }
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = channelLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = if (isConnected && percentage > 0) "$percentage" else "--",
-                    fontFamily = FontFamily.SansSerif,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 34.sp,
-                    letterSpacing = (-0.5).sp,
+                    style = MaterialTheme.typography.displayLarge,
                     color = if (isConnected && percentage > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (isConnected && percentage > 0) {
                     Text(
                         text = "%",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp, start = 2.dp)
+                        modifier = Modifier.padding(bottom = 3.dp, start = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Utilitarian linear meter (flat, zero-gradient)
+            // Gauge bar with semantic battery warning
+            val barColor = when {
+                !isConnected -> MaterialTheme.colorScheme.outline
+                percentage <= 20 -> StatusRed
+                percentage <= 35 -> StatusAmber
+                else -> StatusGreen
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -917,7 +768,7 @@ fun MinimalBatteryPod(
                             .fillMaxWidth(animatedProgress)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.onSurface)
+                            .background(barColor)
                     )
                 }
             }
@@ -925,8 +776,100 @@ fun MinimalBatteryPod(
     }
 }
 
+// ============================================================
+// 4. NOISE ISOLATION PANEL (ACCESSIBLE 48DP+ GRID)
+// ============================================================
+
 @Composable
-fun MinimalNoiseTile(
+private fun NoiseIsolationPanel(
+    currentMode: NoiseMode,
+    isConnected: Boolean,
+    isPending: Boolean,
+    onSelectMode: (NoiseMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(
+        modifier = modifier.alpha(if (isConnected) 1f else 0.7f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Noise Control",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (isPending) {
+                Text(
+                    text = "Switching...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = StatusAmber
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Hardware microphone phase cancellation profiles",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Row 1: Primary Modes (ANC, Transparency, Normal)
+        val primaryModes = listOf(
+            Triple(NoiseMode.ANC, "ANC", "Shield"),
+            Triple(NoiseMode.TRANSPARENCY, "Pass", "Aware"),
+            Triple(NoiseMode.NORMAL, "Normal", "Direct")
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            primaryModes.forEach { (mode, label, sub) ->
+                NoiseModeTile(
+                    title = label,
+                    subtitle = sub,
+                    isSelected = isConnected && currentMode == mode,
+                    enabled = isConnected && !isPending,
+                    onClick = { onSelectMode(mode) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Row 2: Specialized Modes (Leisure, Wind Reduction)
+        val secondaryModes = listOf(
+            Triple(NoiseMode.LEISURE, "Leisure", "Soft Ambient Cut"),
+            Triple(NoiseMode.REDUCE_WIND, "Wind Reduction", "Aero Filter")
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            secondaryModes.forEach { (mode, label, sub) ->
+                NoiseModeTile(
+                    title = label,
+                    subtitle = sub,
+                    isSelected = isConnected && currentMode == mode,
+                    enabled = isConnected && !isPending,
+                    onClick = { onSelectMode(mode) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoiseModeTile(
     title: String,
     subtitle: String,
     isSelected: Boolean,
@@ -934,19 +877,19 @@ fun MinimalNoiseTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surface
-    val borderCol = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
-    val titleCol = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface
-    val subCol = if (isSelected) MaterialTheme.colorScheme.surface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val titleCol = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val subCol = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Box(
         modifier = modifier
-            .height(56.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .height(52.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .border(1.dp, borderCol, RoundedCornerShape(6.dp))
+            .border(1.dp, borderCol, RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -955,57 +898,269 @@ fun MinimalNoiseTile(
         ) {
             Text(
                 text = title,
-                fontFamily = FontFamily.SansSerif,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (enabled) titleCol else titleCol.copy(alpha = 0.4f),
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = subtitle,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 8.sp,
+                style = MaterialTheme.typography.labelSmall,
                 color = if (enabled) subCol else subCol.copy(alpha = 0.4f),
                 textAlign = TextAlign.Center,
-                lineHeight = 10.sp
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
+// ============================================================
+// 5. LOW LATENCY AUDIO PANEL
+// ============================================================
+
 @Composable
-fun MinimalFaderColumn(
+private fun LowLatencyPanel(
+    isGameMode: Boolean,
+    isConnected: Boolean,
+    isPending: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(
+        modifier = modifier.alpha(if (isConnected) 1f else 0.7f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Low Latency Game Mode",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isPending) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Syncing...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = StatusAmber
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isGameMode && isConnected) {
+                        "45ms synchronous buffer engaged for gaming and video"
+                    } else {
+                        "Standard transmission buffer engaged for baseline battery life"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Switch(
+                checked = isGameMode && isConnected,
+                enabled = isConnected && !isPending,
+                onCheckedChange = onToggle
+            )
+        }
+    }
+}
+
+// ============================================================
+// 6. 10-BAND STUDIO EQUALIZER PANEL
+// ============================================================
+
+@Composable
+private fun EqualizerPanel(
+    activePreset: String,
+    eqGains: List<Float>,
+    isConnected: Boolean,
+    isPending: Boolean,
+    onSelectPreset: (String) -> Unit,
+    onResetFlat: () -> Unit,
+    onApply: () -> Unit,
+    onGainChange: (Int, Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(
+        modifier = modifier.alpha(if (isConnected) 1f else 0.85f)
+    ) {
+        // Equalizer Header & Actions
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Studio Equalizer",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "10-Band DSP hardware filters (-10.0 to +10.0 dB)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Reset / Flat Button
+                OutlinedButton(
+                    onClick = onResetFlat,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.defaultMinSize(minHeight = 38.dp)
+                ) {
+                    Text(
+                        text = "Flat",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Apply Profile Button
+                Button(
+                    onClick = onApply,
+                    enabled = isConnected && !isPending,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.defaultMinSize(minHeight = 38.dp)
+                ) {
+                    if (isPending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Applying",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        Text(
+                            text = "Apply",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Preset Pills (Horizontal Scroll with generous 44dp touch area)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PRESET_NAMES.forEach { presetName ->
+                val isSelected = activePreset == presetName
+                val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                val fg = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+                Box(
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(bg)
+                        .border(1.dp, borderCol, RoundedCornerShape(8.dp))
+                        .clickable { onSelectPreset(presetName) }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = presetName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = fg,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // 10 Tactile Vertical Faders Rack
+        // Horizontal scroll container with min 48dp width per column prevents finger collision on narrow screens
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val totalWidth = maxWidth
+            val columnWidth = (totalWidth / 10).coerceAtLeast(46.dp)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                eqGains.forEachIndexed { idx, gain ->
+                    TactileFaderColumn(
+                        freq = FREQ_LABELS[idx],
+                        value = gain,
+                        enabled = true,
+                        onValueChange = { onGainChange(idx, it) },
+                        modifier = Modifier.width(columnWidth)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TactileFaderColumn(
     freq: String,
     value: Float,
-    enabled: Boolean = true,
+    enabled: Boolean,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     val currentOnValueChange by rememberUpdatedState(onValueChange)
-    val isNonZero = value != 0f
+    val isNonZero = kotlin.math.abs(value) >= 0.2f
 
     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
     val outlineColor = MaterialTheme.colorScheme.outline
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val accentColor = MaterialTheme.colorScheme.primary
 
     Column(
         modifier = modifier.fillMaxHeight(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Value text readout (+3.5, 0.0, -2.0)
+        // Gain Readout (+4.5, 0.0, -2.0)
         Text(
             text = "${if (value > 0) "+" else ""}${"%.1f".format(value)}",
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isNonZero) FontWeight.SemiBold else FontWeight.Normal,
             color = if (isNonZero) onSurfaceColor else onSurfaceVariantColor
         )
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Interactive Fader Area (full width and height of column is touchable)
+        // Tactile Fader Track with full column touchable area & haptics
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -1019,7 +1174,10 @@ fun MinimalFaderColumn(
                         val frac = 1f - (clampedY / effectiveHeight)
                         val db = (frac * 20f - 10f)
                         val rounded = (db * 2).roundToInt() / 2.0f
-                        currentOnValueChange(rounded)
+                        if (rounded != value) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnValueChange(rounded)
+                        }
                     }
                 }
                 .pointerInput(enabled) {
@@ -1032,7 +1190,10 @@ fun MinimalFaderColumn(
                             val frac = 1f - (clampedY / effectiveHeight)
                             val db = (frac * 20f - 10f)
                             val rounded = (db * 2).roundToInt() / 2.0f
-                            currentOnValueChange(rounded)
+                            if (rounded != value) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentOnValueChange(rounded)
+                            }
                         },
                         onVerticalDrag = { change, _ ->
                             change.consume()
@@ -1042,7 +1203,10 @@ fun MinimalFaderColumn(
                             val frac = 1f - (clampedY / effectiveHeight)
                             val db = (frac * 20f - 10f)
                             val rounded = (db * 2).roundToInt() / 2.0f
-                            currentOnValueChange(rounded)
+                            if (rounded != value) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentOnValueChange(rounded)
+                            }
                         }
                     )
                 },
@@ -1055,14 +1219,13 @@ fun MinimalFaderColumn(
                 val trackWidth = 8.dp.toPx()
                 val trackRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
 
-                // 1. Background Groove
+                // 1. Groove track
                 drawRoundRect(
                     color = surfaceVariantColor,
                     topLeft = Offset(centerX - trackWidth / 2f, padding),
                     size = Size(trackWidth, effectiveHeight),
                     cornerRadius = trackRadius
                 )
-                // Groove 1px border
                 drawRoundRect(
                     color = outlineColor,
                     topLeft = Offset(centerX - trackWidth / 2f, padding),
@@ -1075,31 +1238,30 @@ fun MinimalFaderColumn(
                 val centerY = padding + effectiveHeight / 2f
                 drawLine(
                     color = outlineColor,
-                    start = Offset(centerX - trackWidth / 2f, centerY),
-                    end = Offset(centerX + trackWidth / 2f, centerY),
+                    start = Offset(centerX - trackWidth / 2f - 3.dp.toPx(), centerY),
+                    end = Offset(centerX + trackWidth / 2f + 3.dp.toPx(), centerY),
                     strokeWidth = 1.dp.toPx()
                 )
 
-                // 3. Normalized level position: value is -10 .. +10
-                // 0 = bottom, 1 = top
+                // 3. Normalized level position (-10 to +10 dB)
                 val norm = ((value + 10f) / 20f).coerceIn(0f, 1f)
                 val thumbY = padding + (1f - norm) * effectiveHeight
 
                 // 4. Level indicator fill from 0 dB center line
-                if (value != 0f) {
+                if (isNonZero) {
                     val fillTop = if (thumbY < centerY) thumbY else centerY
                     val fillHeight = kotlin.math.abs(centerY - thumbY)
                     drawRect(
-                        color = onSurfaceColor.copy(alpha = if (enabled) 0.85f else 0.4f),
+                        color = accentColor.copy(alpha = if (enabled) 0.85f else 0.4f),
                         topLeft = Offset(centerX - (trackWidth - 2.dp.toPx()) / 2f, fillTop),
                         size = Size(trackWidth - 2.dp.toPx(), fillHeight)
                     )
                 }
 
-                // 5. Tactile Thumb Handle (horizontal capsule: width 22dp, height 6dp)
-                val thumbWidth = 22.dp.toPx()
-                val thumbHeight = 6.dp.toPx()
-                val thumbRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                // 5. Tactile Thumb Handle (capsule)
+                val thumbWidth = 24.dp.toPx()
+                val thumbHeight = 7.dp.toPx()
+                val thumbRadius = CornerRadius(3.5.dp.toPx(), 3.5.dp.toPx())
 
                 drawRoundRect(
                     color = onSurfaceColor,
@@ -1115,10 +1277,70 @@ fun MinimalFaderColumn(
         // Frequency Label
         Text(
             text = freq,
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
             color = onSurfaceVariantColor
+        )
+    }
+}
+
+// ============================================================
+// 7. COMMON UTILITY CONTAINERS & FOOTER
+// ============================================================
+
+@Composable
+private fun SectionCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun AppFooter(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val appVersion = remember {
+        try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            pInfo.versionName ?: "1.0.0"
+        } catch (_: Exception) {
+            "1.0.0"
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "TOZO Control  •  v$appVersion",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "Open Source BLE Audio Companion",
+            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
 }

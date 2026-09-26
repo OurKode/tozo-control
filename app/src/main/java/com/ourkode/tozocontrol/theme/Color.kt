@@ -49,3 +49,13 @@ val PastelGreenTextDark = Color(0xFF7ECE87)
 
 val PastelYellowBgDark = Color(0xFF2B2515)
 val PastelYellowTextDark = Color(0xFFE0C170)
+
+// Semantic State & Audio Utility Tokens
+val StatusGreen = Color(0xFF10B981)
+val StatusAmber = Color(0xFFF59E0B)
+val StatusRed = Color(0xFFEF4444)
+val StatusMuted = Color(0xFF9CA3AF)
+
+val AccentBlueLight = Color(0xFF2563EB)
+val AccentBlueDark = Color(0xFF3B82F6)
+
