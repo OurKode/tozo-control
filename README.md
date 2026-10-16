@@ -52,9 +52,6 @@ Communication with TOZO earbuds occurs over standard Bluetooth Low Energy GATT c
 | Noise Mode Status | `00040000` | `000401 [00 / 01] [chk]` | `01` = ANC, `00` = Normal |
 | Equalizer DSP Status | `000b0000` | `000b14 [10 gain bytes] [10 Qs]` | 10 frequency band gains in tenths of dB |
 | Touch Controls | `00030000` | `00030a [5B L] [5B R] [chk]` | 10-byte touch config for Left & Right |
-| Sound Effect Mode | `00130000` | `001301 [00 / 01] [chk]` | `00` = Standard Stereo, `01` = 3D Spatial |
-| Dual Connection (1-to-2) | `00250000` | `002501 [00 / 01] [chk]` | `01` = Multipoint ON, `00` = OFF |
-| Sound Balance | `00260000` | `002601 [signed byte] [chk]` | `-10` (Left) to `+10` (Right), `0` = Center |
 
 #### 2. Control Commands (App -> Earbud)
 
@@ -67,9 +64,6 @@ Communication with TOZO earbuds occurs over standard Bluetooth Low Energy GATT c
 | Wind Reduction | `1007010101` | Anti-wind turbulence filter |
 | Leisure Mode | `1008010101` | Soft ambient cut |
 | Set Touch Controls | `10030a [5B L] [5B R] [chk]` | Remap tap, double, triple, long press |
-| Set Spatial Audio | `101301 [00/01] [chk]` | Stereo (`00`) / 3D Spatial Audio (`01`) |
-| Set Dual Multipoint | `102501 [01/00] [chk]` | Dual-device connection enable / disable |
-| Set Sound Balance | `102601 [signed byte] [chk]` | L/R balance `-10` to `+10` |
 | Reset DSP Equalizer | `100c0000` | Reverts DSP hardware EQ registers |
 | Power Off Earbuds | `1010010000` | Direct power-down command |
 

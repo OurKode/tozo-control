@@ -52,15 +52,6 @@ data class TouchConfig(
     val rightLong: TouchAction = TouchAction.VOLUME_UP
 )
 
-enum class SoundEffectMode(val code: Int, val label: String) {
-    GENERAL(0, "Standard Stereo"),
-    SPATIAL_3D(1, "3D Spatial Audio");
-
-    companion object {
-        fun fromCode(code: Int): SoundEffectMode = entries.firstOrNull { it.code == code } ?: GENERAL
-    }
-}
-
 @SuppressLint("MissingPermission")
 class TozoBleManager(private val context: Context) {
 
@@ -169,15 +160,6 @@ class TozoBleManager(private val context: Context) {
     )
     private val _touchConfig = MutableStateFlow(savedTouchConfig)
     val touchConfig: StateFlow<TouchConfig> = _touchConfig.asStateFlow()
-
-    private val _isMultipoint = MutableStateFlow(prefs.getBoolean("last_multipoint", false))
-    val isMultipoint: StateFlow<Boolean> = _isMultipoint.asStateFlow()
-
-    private val _soundBalance = MutableStateFlow(prefs.getInt("last_sound_balance", 0))
-    val soundBalance: StateFlow<Int> = _soundBalance.asStateFlow()
-
-    private val _soundEffectMode = MutableStateFlow(SoundEffectMode.fromCode(prefs.getInt("last_sound_effect", 0)))
-    val soundEffectMode: StateFlow<SoundEffectMode> = _soundEffectMode.asStateFlow()
 
     private var isScanning = false
 
@@ -481,12 +463,6 @@ class TozoBleManager(private val context: Context) {
                             sendHex("000b0000", "Read Equalizer Status")
                             delay(200)
                             sendHex("00030000", "Read Touch Config")
-                            delay(200)
-                            sendHex("00130000", "Read Sound Effect Mode")
-                            delay(200)
-                            sendHex("00250000", "Read Multipoint")
-                            delay(200)
-                            sendHex("00260000", "Read Sound Balance")
                         }
                     }
                 } else {
@@ -565,18 +541,6 @@ class TozoBleManager(private val context: Context) {
         // 6. Touch Configuration: 00 03 0a [5B Left] [5B Right] [chk]
         else if (hexStr.startsWith("00030a") && data.size >= 13) {
             _touchConfig.value = parseTouchConfig(data)
-        }
-        // 7. Sound Effect (Spatial Audio): 00 13 01 [code] [chk] or 20 17 01 [code] [chk]
-        else if ((hexStr.startsWith("001301") || hexStr.startsWith("201701")) && data.size >= 4) {
-            _soundEffectMode.value = SoundEffectMode.fromCode(data[3].toInt())
-        }
-        // 8. Multipoint (1-to-2 connection): 00 25 01 [code] [chk] or 20 1c 01 [code] [chk]
-        else if ((hexStr.startsWith("002501") || hexStr.startsWith("201c01")) && data.size >= 4) {
-            _isMultipoint.value = (data[3].toInt() == 1)
-        }
-        // 9. Sound Balance: 00 26 01 [val] [chk] or 20 1d 01 [val] [chk]
-        else if ((hexStr.startsWith("002601") || hexStr.startsWith("201d01")) && data.size >= 4) {
-            _soundBalance.value = data[3].toInt().toByte().toInt().coerceIn(-10, 10)
         }
     }
 
@@ -699,34 +663,6 @@ class TozoBleManager(private val context: Context) {
         )
         val packet = buildPacket(byteArrayOf(0x10, 0x03), payload)
         sendHex(packet.joinToString("") { "%02x".format(it) }, "Set Touch Controls")
-    }
-
-    fun setMultipoint(enabled: Boolean) {
-        if (!_isConnected.value || writeChar == null) return
-        _isMultipoint.value = enabled
-        prefs.edit().putBoolean("last_multipoint", enabled).apply()
-        val payload = byteArrayOf(if (enabled) 0x01 else 0x00)
-        val packet = buildPacket(byteArrayOf(0x10, 0x25), payload)
-        sendHex(packet.joinToString("") { "%02x".format(it) }, "Multipoint ${if (enabled) "ON" else "OFF"}")
-    }
-
-    fun setSoundBalance(balance: Int) {
-        if (!_isConnected.value || writeChar == null) return
-        val clamped = balance.coerceIn(-10, 10)
-        _soundBalance.value = clamped
-        prefs.edit().putInt("last_sound_balance", clamped).apply()
-        val payload = byteArrayOf((clamped and 0xFF).toByte())
-        val packet = buildPacket(byteArrayOf(0x10, 0x26), payload)
-        sendHex(packet.joinToString("") { "%02x".format(it) }, "Sound Balance $clamped")
-    }
-
-    fun setSoundEffectMode(mode: SoundEffectMode) {
-        if (!_isConnected.value || writeChar == null) return
-        _soundEffectMode.value = mode
-        prefs.edit().putInt("last_sound_effect", mode.code).apply()
-        val payload = byteArrayOf(mode.code.toByte())
-        val packet = buildPacket(byteArrayOf(0x10, 0x13), payload)
-        sendHex(packet.joinToString("") { "%02x".format(it) }, "Sound Effect ${mode.label}")
     }
 
     fun powerOff() {

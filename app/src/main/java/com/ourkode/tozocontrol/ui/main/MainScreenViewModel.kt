@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ourkode.tozocontrol.data.NoiseMode
-import com.ourkode.tozocontrol.data.SoundEffectMode
 import com.ourkode.tozocontrol.data.TouchConfig
 import com.ourkode.tozocontrol.data.TozoBleManager
 import kotlinx.coroutines.Job
@@ -29,9 +28,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val currentNoiseMode = bleManager.currentNoiseMode
     val currentEq = bleManager.currentEq
     val touchConfig = bleManager.touchConfig
-    val isMultipoint = bleManager.isMultipoint
-    val soundBalance = bleManager.soundBalance
-    val soundEffectMode = bleManager.soundEffectMode
 
     // Cooldown states to prevent BLE command flooding
     private val _isNoisePending = MutableStateFlow(false)
@@ -88,28 +84,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             // 400ms cooldown to ensure 24-byte DSP payload persists stably in earbud registers
             delay(400)
             _isEqPending.value = false
-        }
-    }
-
-    private var balanceJob: Job? = null
-
-    fun setSoundBalance(balance: Int) {
-        balanceJob?.cancel()
-        balanceJob = viewModelScope.launch {
-            delay(120) // Smooth slider dragging debounce
-            bleManager.setSoundBalance(balance)
-        }
-    }
-
-    fun setMultipoint(enable: Boolean) {
-        viewModelScope.launch {
-            bleManager.setMultipoint(enable)
-        }
-    }
-
-    fun setSoundEffectMode(mode: SoundEffectMode) {
-        viewModelScope.launch {
-            bleManager.setSoundEffectMode(mode)
         }
     }
 

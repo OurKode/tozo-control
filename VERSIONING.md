@@ -54,7 +54,7 @@ defaultConfig {
 | `1.0.2` | 1 | 0 | 2 | `10002` | Patch: UI padding adjustment |
 | `1.1.0` | 1 | 1 | 0 | `10100` | Minor: UI redesign, R8 shrinking, tablet layout |
 | `1.1.1` | 1 | 1 | 1 | `10101` | Patch: Zero-overflow graphic equalizer spline curve |
-| `1.2.0` | 1 | 2 | 0 | `10200` | Minor: TOZO AeroSound 3 reverse-engineered protocol (touch remap, balance, spatial 3D, multipoint, hardware controls) |
+| `1.2.0` | 1 | 2 | 0 | `10200` | Minor: TOZO AeroSound 3 reverse-engineered protocol (touch gesture remapping, hardware DSP reset, power off) |
 | `2.0.0` | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
 
 ---

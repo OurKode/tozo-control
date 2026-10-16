@@ -11,9 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Reverse-engineered TOZO AeroSound 3 (`CA0D` / JieLi SoC) command protocol integration:
   - Touch gesture remapping for Left and Right earbuds (Single, Double, Triple, Long Press with 9 configurable actions).
-  - L/R channel sound balance slider (-10 to +10) with one-tap Center reset.
-  - 3D Spatial Audio soundstage virtualization selector (Stereo vs Spatial 3D).
-  - Dual-Device Multipoint (1-to-2 connection) toggle switch.
   - Direct hardware DSP EQ Reset command (`0x100C`) and Earbud Power Off (`0x1010`) with confirmation safety dialog.
   - Autonomous event synchronization for battery (`0x200E`), ANC (`0x2011`), transparency (`0x2010`), wind (`0x2013`), leisure (`0x2014`), game mode (`0x200F`), and DSP EQ (`0x2012`).
 - Unit test suite verifying packet framing, checksum calculation, and touch serialization.

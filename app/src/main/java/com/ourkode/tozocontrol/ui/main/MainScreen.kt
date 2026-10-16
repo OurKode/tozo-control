@@ -51,7 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.ourkode.tozocontrol.data.NoiseMode
-import com.ourkode.tozocontrol.data.SoundEffectMode
 import com.ourkode.tozocontrol.data.TouchAction
 import com.ourkode.tozocontrol.data.TouchConfig
 import com.ourkode.tozocontrol.theme.*
@@ -98,9 +97,6 @@ fun MainScreen(
     val currentNoiseMode by viewModel.currentNoiseMode.collectAsStateWithLifecycle()
     val currentEq by viewModel.currentEq.collectAsStateWithLifecycle()
     val touchConfig by viewModel.touchConfig.collectAsStateWithLifecycle()
-    val isMultipoint by viewModel.isMultipoint.collectAsStateWithLifecycle()
-    val soundBalance by viewModel.soundBalance.collectAsStateWithLifecycle()
-    val soundEffectMode by viewModel.soundEffectMode.collectAsStateWithLifecycle()
 
     val isNoisePending by viewModel.isNoisePending.collectAsStateWithLifecycle()
     val isGameModePending by viewModel.isGameModePending.collectAsStateWithLifecycle()
@@ -258,24 +254,6 @@ fun MainScreen(
                             onToggle = { viewModel.setGameMode(it) }
                         )
 
-                        SpatialAudioPanel(
-                            currentMode = soundEffectMode,
-                            isConnected = isConnected,
-                            onSelectMode = { viewModel.setSoundEffectMode(it) }
-                        )
-
-                        SoundBalancePanel(
-                            balance = soundBalance,
-                            isConnected = isConnected,
-                            onBalanceChange = { viewModel.setSoundBalance(it) }
-                        )
-
-                        MultipointPanel(
-                            isMultipoint = isMultipoint,
-                            isConnected = isConnected,
-                            onToggle = { viewModel.setMultipoint(it) }
-                        )
-
                         TouchControlsPanel(
                             touchConfig = touchConfig,
                             isConnected = isConnected,
@@ -405,24 +383,6 @@ fun MainScreen(
                                         isConnected = isConnected,
                                         isPending = isGameModePending,
                                         onToggle = { viewModel.setGameMode(it) }
-                                    )
-
-                                    SpatialAudioPanel(
-                                        currentMode = soundEffectMode,
-                                        isConnected = isConnected,
-                                        onSelectMode = { viewModel.setSoundEffectMode(it) }
-                                    )
-
-                                    SoundBalancePanel(
-                                        balance = soundBalance,
-                                        isConnected = isConnected,
-                                        onBalanceChange = { viewModel.setSoundBalance(it) }
-                                    )
-
-                                    MultipointPanel(
-                                        isMultipoint = isMultipoint,
-                                        isConnected = isConnected,
-                                        onToggle = { viewModel.setMultipoint(it) }
                                     )
 
                                     TouchControlsPanel(
@@ -1603,166 +1563,8 @@ private fun InteractiveGraphicEq(
 // ============================================================
 // 6. HARDWARE EXTENSIONS: SPATIAL AUDIO, SOUND BALANCE, TOUCH & ACTIONS
 // ============================================================
-
-@Composable
-private fun SpatialAudioPanel(
-    currentMode: SoundEffectMode,
-    isConnected: Boolean,
-    onSelectMode: (SoundEffectMode) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    SectionCard(modifier = modifier) {
-        Text(
-            text = "Spatial Audio",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = "3D spatial soundstage virtualization",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(14.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SoundEffectMode.entries.forEach { mode ->
-                val isSelected = currentMode == mode
-                val bg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(bg)
-                        .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-                        .clickable(enabled = isConnected) { onSelectMode(mode) }
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = mode.label,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = textColor,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SoundBalancePanel(
-    balance: Int,
-    isConnected: Boolean,
-    onBalanceChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    SectionCard(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Sound Balance",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                val balanceText = when {
-                    balance == 0 -> "Center (Balanced)"
-                    balance < 0 -> "Left dominant (${-balance})"
-                    else -> "Right dominant (+$balance)"
-                }
-                Text(
-                    text = balanceText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (balance != 0) {
-                TextButton(
-                    onClick = { onBalanceChange(0) },
-                    enabled = isConnected,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text("Center", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "L",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (balance < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Slider(
-                value = balance.toFloat(),
-                onValueChange = { onBalanceChange(it.roundToInt()) },
-                valueRange = -10f..10f,
-                steps = 19,
-                enabled = isConnected,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "R",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (balance > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun MultipointPanel(
-    isMultipoint: Boolean,
-    isConnected: Boolean,
-    onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    SectionCard(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Dual-Device Connection",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Multipoint audio connection across two devices",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = isMultipoint,
-                onCheckedChange = onToggle,
-                enabled = isConnected
-            )
-        }
-    }
-}
+// 6. HARDWARE EXTENSIONS: TOUCH CONTROLS & EARBUD ACTIONS
+// ============================================================
 
 @Composable
 private fun TouchControlsPanel(

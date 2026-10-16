@@ -34,12 +34,6 @@ class MainScreenViewModelTest {
         assertEquals("100c0000", hex)
     }
 
-    @Test
-    fun buildPacket_multipointPayload_computesCorrectChecksum() {
-        val packet = com.ourkode.tozocontrol.data.TozoBleManager.buildPacket(byteArrayOf(0x10, 0x25), byteArrayOf(0x01))
-        val hex = packet.joinToString("") { "%02x".format(it) }
-        assertEquals("1025010101", hex)
-    }
 
     @Test
     fun buildPacket_powerOff_hasExpectedFormat() {
@@ -93,12 +87,5 @@ class MainScreenViewModelTest {
         assertEquals(com.ourkode.tozocontrol.data.TouchAction.NEXT_TRACK, parsed.rightDouble)
         assertEquals(com.ourkode.tozocontrol.data.TouchAction.ANC_SWITCH, parsed.rightTriple)
         assertEquals(com.ourkode.tozocontrol.data.TouchAction.VOLUME_UP, parsed.rightLong)
-    }
-
-    @Test
-    fun soundEffectMode_fromCode_resolvesCorrectly() {
-        assertEquals(com.ourkode.tozocontrol.data.SoundEffectMode.GENERAL, com.ourkode.tozocontrol.data.SoundEffectMode.fromCode(0))
-        assertEquals(com.ourkode.tozocontrol.data.SoundEffectMode.SPATIAL_3D, com.ourkode.tozocontrol.data.SoundEffectMode.fromCode(1))
-        assertEquals(com.ourkode.tozocontrol.data.SoundEffectMode.GENERAL, com.ourkode.tozocontrol.data.SoundEffectMode.fromCode(99))
     }
 }
