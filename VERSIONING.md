@@ -53,7 +53,8 @@ defaultConfig {
 | `1.0.1` | 1 | 0 | 1 | `10001` | Patch: BLE reconnection fix |
 | `1.0.2` | 1 | 0 | 2 | `10002` | Patch: UI padding adjustment |
 | `1.1.0` | 1 | 1 | 0 | `10100` | Minor: UI redesign, R8 shrinking, tablet layout |
-| `1.2.0` | 1 | 2 | 0 | `10200` | Minor: Add custom preset import/export |
+| `1.1.1` | 1 | 1 | 1 | `10101` | Patch: Zero-overflow graphic equalizer spline curve |
+| `1.2.0` | 1 | 2 | 0 | `10200` | Minor: TOZO AeroSound 3 reverse-engineered protocol (touch remap, balance, spatial 3D, multipoint, hardware controls) |
 | `2.0.0` | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
 
 ---

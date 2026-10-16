@@ -25,6 +25,42 @@ enum class NoiseMode(val label: String, val hexCmd: String) {
     NORMAL("Normal", "1004010000")
 }
 
+enum class TouchAction(val code: Byte, val label: String) {
+    NONE(0, "None"),
+    PLAY_PAUSE(1, "Play / Pause"),
+    NEXT_TRACK(2, "Next Track"),
+    PREV_TRACK(3, "Previous Track"),
+    VOICE_ASSISTANT(4, "Voice Assistant"),
+    VOLUME_UP(5, "Volume +"),
+    VOLUME_DOWN(6, "Volume -"),
+    GAME_MODE(7, "Game Mode"),
+    ANC_SWITCH(8, "ANC Switch");
+
+    companion object {
+        fun fromCode(code: Byte): TouchAction = entries.firstOrNull { it.code == code } ?: NONE
+    }
+}
+
+data class TouchConfig(
+    val leftSingle: TouchAction = TouchAction.NONE,
+    val leftDouble: TouchAction = TouchAction.PREV_TRACK,
+    val leftTriple: TouchAction = TouchAction.VOICE_ASSISTANT,
+    val leftLong: TouchAction = TouchAction.VOLUME_DOWN,
+    val rightSingle: TouchAction = TouchAction.NONE,
+    val rightDouble: TouchAction = TouchAction.NEXT_TRACK,
+    val rightTriple: TouchAction = TouchAction.PLAY_PAUSE,
+    val rightLong: TouchAction = TouchAction.VOLUME_UP
+)
+
+enum class SoundEffectMode(val code: Int, val label: String) {
+    GENERAL(0, "Standard Stereo"),
+    SPATIAL_3D(1, "3D Spatial Audio");
+
+    companion object {
+        fun fromCode(code: Int): SoundEffectMode = entries.firstOrNull { it.code == code } ?: GENERAL
+    }
+}
+
 @SuppressLint("MissingPermission")
 class TozoBleManager(private val context: Context) {
 
@@ -37,6 +73,35 @@ class TozoBleManager(private val context: Context) {
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         val DEFAULT_QS = byteArrayOf(0x05, 0x06, 0x07, 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14)
+
+        fun buildPacket(cmdHeader: ByteArray, payload: ByteArray = ByteArray(0)): ByteArray {
+            val packet = ByteArray(cmdHeader.size + 1 + payload.size + 1)
+            System.arraycopy(cmdHeader, 0, packet, 0, cmdHeader.size)
+            packet[cmdHeader.size] = (payload.size and 0xFF).toByte()
+            if (payload.isNotEmpty()) {
+                System.arraycopy(payload, 0, packet, cmdHeader.size + 1, payload.size)
+            }
+            var chk = 0
+            for (b in payload) {
+                chk = (chk + (b.toInt() and 0xFF)) and 0xFF
+            }
+            packet[packet.size - 1] = chk.toByte()
+            return packet
+        }
+
+        fun parseTouchConfig(data: ByteArray): TouchConfig {
+            if (data.size < 13) return TouchConfig()
+            return TouchConfig(
+                leftSingle = TouchAction.fromCode(data[3]),
+                leftDouble = TouchAction.fromCode(data[4]),
+                leftTriple = TouchAction.fromCode(data[5]),
+                leftLong = TouchAction.fromCode(data[6]),
+                rightSingle = TouchAction.fromCode(data[8]),
+                rightDouble = TouchAction.fromCode(data[9]),
+                rightTriple = TouchAction.fromCode(data[10]),
+                rightLong = TouchAction.fromCode(data[11])
+            )
+        }
     }
 
     private val prefs = context.getSharedPreferences("tozo_ble_prefs", Context.MODE_PRIVATE)
@@ -92,6 +157,28 @@ class TozoBleManager(private val context: Context) {
     private val _currentEq = MutableStateFlow(savedEqList)
     val currentEq: StateFlow<List<Float>> = _currentEq.asStateFlow()
 
+    private val savedTouchConfig = TouchConfig(
+        leftSingle = TouchAction.fromCode(prefs.getInt("touch_left_single", TouchAction.NONE.code.toInt()).toByte()),
+        leftDouble = TouchAction.fromCode(prefs.getInt("touch_left_double", TouchAction.PREV_TRACK.code.toInt()).toByte()),
+        leftTriple = TouchAction.fromCode(prefs.getInt("touch_left_triple", TouchAction.VOICE_ASSISTANT.code.toInt()).toByte()),
+        leftLong = TouchAction.fromCode(prefs.getInt("touch_left_long", TouchAction.VOLUME_DOWN.code.toInt()).toByte()),
+        rightSingle = TouchAction.fromCode(prefs.getInt("touch_right_single", TouchAction.NONE.code.toInt()).toByte()),
+        rightDouble = TouchAction.fromCode(prefs.getInt("touch_right_double", TouchAction.NEXT_TRACK.code.toInt()).toByte()),
+        rightTriple = TouchAction.fromCode(prefs.getInt("touch_right_triple", TouchAction.PLAY_PAUSE.code.toInt()).toByte()),
+        rightLong = TouchAction.fromCode(prefs.getInt("touch_right_long", TouchAction.VOLUME_UP.code.toInt()).toByte())
+    )
+    private val _touchConfig = MutableStateFlow(savedTouchConfig)
+    val touchConfig: StateFlow<TouchConfig> = _touchConfig.asStateFlow()
+
+    private val _isMultipoint = MutableStateFlow(prefs.getBoolean("last_multipoint", false))
+    val isMultipoint: StateFlow<Boolean> = _isMultipoint.asStateFlow()
+
+    private val _soundBalance = MutableStateFlow(prefs.getInt("last_sound_balance", 0))
+    val soundBalance: StateFlow<Int> = _soundBalance.asStateFlow()
+
+    private val _soundEffectMode = MutableStateFlow(SoundEffectMode.fromCode(prefs.getInt("last_sound_effect", 0)))
+    val soundEffectMode: StateFlow<SoundEffectMode> = _soundEffectMode.asStateFlow()
+
     private var isScanning = false
 
     private val scanCallback = object : ScanCallback() {
@@ -110,7 +197,23 @@ class TozoBleManager(private val context: Context) {
 
             val isTozoMac = address.startsWith("94:4B:F8", ignoreCase = true)
 
-            if (isTozoName || hasTozoService || isTozoMac) {
+            // Check manufacturer data (TOZO uses 0xFF with 'WR' or 'WOER' mark)
+            var hasTozoManufacturer = false
+            val mfgData = result.scanRecord?.bytes
+            if (mfgData != null && mfgData.size >= 4) {
+                for (i in 0 until mfgData.size - 2) {
+                    if ((mfgData[i] == 'W'.code.toByte() && mfgData[i + 1] == 'R'.code.toByte()) ||
+                        (i <= mfgData.size - 4 &&
+                         mfgData[i] == 'W'.code.toByte() && mfgData[i + 1] == 'O'.code.toByte() &&
+                         mfgData[i + 2] == 'E'.code.toByte() && mfgData[i + 3] == 'R'.code.toByte())
+                    ) {
+                        hasTozoManufacturer = true
+                        break
+                    }
+                }
+            }
+
+            if (isTozoName || hasTozoService || isTozoMac || hasTozoManufacturer) {
                 Log.d(TAG, "Discovered TOZO earbud via BLE: $name ($address)")
                 stopScan()
                 _connectedDeviceName.value = if (name.isNotBlank()) name else "TOZO AeroSound 3"
@@ -368,14 +471,22 @@ class TozoBleManager(private val context: Context) {
                             delay(300)
                             // Query hardware state directly from earbud registers
                             sendHex("00010000", "Read Firmware")
-                            delay(250)
+                            delay(200)
                             sendHex("00020000", "Read Battery")
-                            delay(250)
+                            delay(200)
                             sendHex("00060000", "Read Game Mode")
-                            delay(250)
+                            delay(200)
                             sendHex("00040000", "Read Noise Mode")
-                            delay(250)
+                            delay(200)
                             sendHex("000b0000", "Read Equalizer Status")
+                            delay(200)
+                            sendHex("00030000", "Read Touch Config")
+                            delay(200)
+                            sendHex("00130000", "Read Sound Effect Mode")
+                            delay(200)
+                            sendHex("00250000", "Read Multipoint")
+                            delay(200)
+                            sendHex("00260000", "Read Sound Balance")
                         }
                     }
                 } else {
@@ -420,29 +531,29 @@ class TozoBleManager(private val context: Context) {
             val l = "${data[3]}.${data[4]}.${data[5]}"
             _firmwareVersion.value = "v$l"
         }
-        // 3. Game Mode: 00 06 01 [status] [chk]
-        else if (hexStr.startsWith("000601") && data.size >= 4) {
+        // 3. Game Mode: 00 06 01 [status] [chk] or 20 0f 01 [status] [chk]
+        else if ((hexStr.startsWith("000601") || hexStr.startsWith("200f01")) && data.size >= 4) {
             _isGameMode.value = (data[3].toInt() == 1)
         }
         // 4. Noise Mode:
-        else if (hexStr.startsWith("000401") && data.size >= 4) {
+        else if ((hexStr.startsWith("000401") || hexStr.startsWith("201101")) && data.size >= 4) {
             val modeCode = data[3].toInt()
             when (modeCode) {
                 1 -> _currentNoiseMode.value = NoiseMode.ANC
                 0 -> _currentNoiseMode.value = NoiseMode.NORMAL
             }
         }
-        else if (hexStr.startsWith("000501") && data.size >= 4 && data[3].toInt() == 1) {
+        else if ((hexStr.startsWith("000501") || hexStr.startsWith("201001")) && data.size >= 4 && data[3].toInt() == 1) {
             _currentNoiseMode.value = NoiseMode.TRANSPARENCY
         }
-        else if (hexStr.startsWith("000701") && data.size >= 4 && data[3].toInt() == 1) {
+        else if ((hexStr.startsWith("000701") || hexStr.startsWith("201301")) && data.size >= 4 && data[3].toInt() == 1) {
             _currentNoiseMode.value = NoiseMode.REDUCE_WIND
         }
-        else if (hexStr.startsWith("000801") && data.size >= 4 && data[3].toInt() == 1) {
+        else if ((hexStr.startsWith("000801") || hexStr.startsWith("201401")) && data.size >= 4 && data[3].toInt() == 1) {
             _currentNoiseMode.value = NoiseMode.LEISURE
         }
-        // 5. EQ Status: 00 0b 14 [10 bytes] ...
-        else if (hexStr.startsWith("000b14") && data.size >= 23) {
+        // 5. EQ Status: 00 0b 14 [10 bytes] ... or 20 12 14 [10 bytes] ...
+        else if ((hexStr.startsWith("000b14") || hexStr.startsWith("201214")) && data.size >= 13) {
             val list = mutableListOf<Float>()
             for (i in 3 until 13) {
                 val b = data[i]
@@ -450,6 +561,22 @@ class TozoBleManager(private val context: Context) {
                 list.add(valDb)
             }
             _currentEq.value = list
+        }
+        // 6. Touch Configuration: 00 03 0a [5B Left] [5B Right] [chk]
+        else if (hexStr.startsWith("00030a") && data.size >= 13) {
+            _touchConfig.value = parseTouchConfig(data)
+        }
+        // 7. Sound Effect (Spatial Audio): 00 13 01 [code] [chk] or 20 17 01 [code] [chk]
+        else if ((hexStr.startsWith("001301") || hexStr.startsWith("201701")) && data.size >= 4) {
+            _soundEffectMode.value = SoundEffectMode.fromCode(data[3].toInt())
+        }
+        // 8. Multipoint (1-to-2 connection): 00 25 01 [code] [chk] or 20 1c 01 [code] [chk]
+        else if ((hexStr.startsWith("002501") || hexStr.startsWith("201c01")) && data.size >= 4) {
+            _isMultipoint.value = (data[3].toInt() == 1)
+        }
+        // 9. Sound Balance: 00 26 01 [val] [chk] or 20 1d 01 [val] [chk]
+        else if ((hexStr.startsWith("002601") || hexStr.startsWith("201d01")) && data.size >= 4) {
+            _soundBalance.value = data[3].toInt().toByte().toInt().coerceIn(-10, 10)
         }
     }
 
@@ -533,6 +660,80 @@ class TozoBleManager(private val context: Context) {
         _currentEq.value = gainsDb
         val hexStr = fullPacket.joinToString("") { "%02x".format(it) }
         sendHex(hexStr, "Apply 10-Band EQ")
+    }
+
+    fun resetEq() {
+        if (!_isConnected.value || writeChar == null) return
+        val defaultList = List(10) { 0.0f }
+        _currentEq.value = defaultList
+        prefs.edit().putString("last_eq_gains", defaultList.joinToString(",")).apply()
+        val packet = buildPacket(byteArrayOf(0x10, 0x0C))
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Reset EQ")
+    }
+
+    fun setTouchConfig(config: TouchConfig) {
+        if (!_isConnected.value || writeChar == null) return
+        _touchConfig.value = config
+        prefs.edit()
+            .putInt("touch_left_single", config.leftSingle.code.toInt())
+            .putInt("touch_left_double", config.leftDouble.code.toInt())
+            .putInt("touch_left_triple", config.leftTriple.code.toInt())
+            .putInt("touch_left_long", config.leftLong.code.toInt())
+            .putInt("touch_right_single", config.rightSingle.code.toInt())
+            .putInt("touch_right_double", config.rightDouble.code.toInt())
+            .putInt("touch_right_triple", config.rightTriple.code.toInt())
+            .putInt("touch_right_long", config.rightLong.code.toInt())
+            .apply()
+
+        val payload = byteArrayOf(
+            config.leftSingle.code,
+            config.leftDouble.code,
+            config.leftTriple.code,
+            config.leftLong.code,
+            0x00,
+            config.rightSingle.code,
+            config.rightDouble.code,
+            config.rightTriple.code,
+            config.rightLong.code,
+            0x00
+        )
+        val packet = buildPacket(byteArrayOf(0x10, 0x03), payload)
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Set Touch Controls")
+    }
+
+    fun setMultipoint(enabled: Boolean) {
+        if (!_isConnected.value || writeChar == null) return
+        _isMultipoint.value = enabled
+        prefs.edit().putBoolean("last_multipoint", enabled).apply()
+        val payload = byteArrayOf(if (enabled) 0x01 else 0x00)
+        val packet = buildPacket(byteArrayOf(0x10, 0x25), payload)
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Multipoint ${if (enabled) "ON" else "OFF"}")
+    }
+
+    fun setSoundBalance(balance: Int) {
+        if (!_isConnected.value || writeChar == null) return
+        val clamped = balance.coerceIn(-10, 10)
+        _soundBalance.value = clamped
+        prefs.edit().putInt("last_sound_balance", clamped).apply()
+        val payload = byteArrayOf((clamped and 0xFF).toByte())
+        val packet = buildPacket(byteArrayOf(0x10, 0x26), payload)
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Sound Balance $clamped")
+    }
+
+    fun setSoundEffectMode(mode: SoundEffectMode) {
+        if (!_isConnected.value || writeChar == null) return
+        _soundEffectMode.value = mode
+        prefs.edit().putInt("last_sound_effect", mode.code).apply()
+        val payload = byteArrayOf(mode.code.toByte())
+        val packet = buildPacket(byteArrayOf(0x10, 0x13), payload)
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Sound Effect ${mode.label}")
+    }
+
+    fun powerOff() {
+        if (!_isConnected.value || writeChar == null) return
+        val payload = byteArrayOf(0x00)
+        val packet = buildPacket(byteArrayOf(0x10, 0x10), payload)
+        sendHex(packet.joinToString("") { "%02x".format(it) }, "Power Off")
     }
 
     private fun hexToByteArray(s: String): ByteArray {

@@ -51,6 +51,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
 import com.ourkode.tozocontrol.data.NoiseMode
+import com.ourkode.tozocontrol.data.SoundEffectMode
+import com.ourkode.tozocontrol.data.TouchAction
+import com.ourkode.tozocontrol.data.TouchConfig
 import com.ourkode.tozocontrol.theme.*
 import kotlin.math.roundToInt
 
@@ -94,6 +97,10 @@ fun MainScreen(
     val isGameMode by viewModel.isGameMode.collectAsStateWithLifecycle()
     val currentNoiseMode by viewModel.currentNoiseMode.collectAsStateWithLifecycle()
     val currentEq by viewModel.currentEq.collectAsStateWithLifecycle()
+    val touchConfig by viewModel.touchConfig.collectAsStateWithLifecycle()
+    val isMultipoint by viewModel.isMultipoint.collectAsStateWithLifecycle()
+    val soundBalance by viewModel.soundBalance.collectAsStateWithLifecycle()
+    val soundEffectMode by viewModel.soundEffectMode.collectAsStateWithLifecycle()
 
     val isNoisePending by viewModel.isNoisePending.collectAsStateWithLifecycle()
     val isGameModePending by viewModel.isGameModePending.collectAsStateWithLifecycle()
@@ -251,6 +258,43 @@ fun MainScreen(
                             onToggle = { viewModel.setGameMode(it) }
                         )
 
+                        SpatialAudioPanel(
+                            currentMode = soundEffectMode,
+                            isConnected = isConnected,
+                            onSelectMode = { viewModel.setSoundEffectMode(it) }
+                        )
+
+                        SoundBalancePanel(
+                            balance = soundBalance,
+                            isConnected = isConnected,
+                            onBalanceChange = { viewModel.setSoundBalance(it) }
+                        )
+
+                        MultipointPanel(
+                            isMultipoint = isMultipoint,
+                            isConnected = isConnected,
+                            onToggle = { viewModel.setMultipoint(it) }
+                        )
+
+                        TouchControlsPanel(
+                            touchConfig = touchConfig,
+                            isConnected = isConnected,
+                            onUpdateConfig = { viewModel.setTouchConfig(it) }
+                        )
+
+                        DeviceActionsPanel(
+                            isConnected = isConnected,
+                            onResetEq = {
+                                val flat = List(10) { 0f }
+                                eqGains = flat
+                                customGains = flat
+                                activePreset = "Flat"
+                                persistEqState("Flat", flat, flat)
+                                viewModel.resetEq()
+                            },
+                            onPowerOff = { viewModel.powerOff() }
+                        )
+
                         AppFooter()
                     }
 
@@ -361,6 +405,43 @@ fun MainScreen(
                                         isConnected = isConnected,
                                         isPending = isGameModePending,
                                         onToggle = { viewModel.setGameMode(it) }
+                                    )
+
+                                    SpatialAudioPanel(
+                                        currentMode = soundEffectMode,
+                                        isConnected = isConnected,
+                                        onSelectMode = { viewModel.setSoundEffectMode(it) }
+                                    )
+
+                                    SoundBalancePanel(
+                                        balance = soundBalance,
+                                        isConnected = isConnected,
+                                        onBalanceChange = { viewModel.setSoundBalance(it) }
+                                    )
+
+                                    MultipointPanel(
+                                        isMultipoint = isMultipoint,
+                                        isConnected = isConnected,
+                                        onToggle = { viewModel.setMultipoint(it) }
+                                    )
+
+                                    TouchControlsPanel(
+                                        touchConfig = touchConfig,
+                                        isConnected = isConnected,
+                                        onUpdateConfig = { viewModel.setTouchConfig(it) }
+                                    )
+
+                                    DeviceActionsPanel(
+                                        isConnected = isConnected,
+                                        onResetEq = {
+                                             val flat = List(10) { 0f }
+                                             eqGains = flat
+                                             customGains = flat
+                                             activePreset = "Flat"
+                                             persistEqState("Flat", flat, flat)
+                                             viewModel.resetEq()
+                                        },
+                                        onPowerOff = { viewModel.powerOff() }
                                     )
 
                                     AppFooter()
@@ -1516,6 +1597,418 @@ private fun InteractiveGraphicEq(
                 }
             }
         }
+    }
+}
+
+// ============================================================
+// 6. HARDWARE EXTENSIONS: SPATIAL AUDIO, SOUND BALANCE, TOUCH & ACTIONS
+// ============================================================
+
+@Composable
+private fun SpatialAudioPanel(
+    currentMode: SoundEffectMode,
+    isConnected: Boolean,
+    onSelectMode: (SoundEffectMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(modifier = modifier) {
+        Text(
+            text = "Spatial Audio",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "3D spatial soundstage virtualization",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SoundEffectMode.entries.forEach { mode ->
+                val isSelected = currentMode == mode
+                val bg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(bg)
+                        .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+                        .clickable(enabled = isConnected) { onSelectMode(mode) }
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = mode.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = textColor,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundBalancePanel(
+    balance: Int,
+    isConnected: Boolean,
+    onBalanceChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Sound Balance",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                val balanceText = when {
+                    balance == 0 -> "Center (Balanced)"
+                    balance < 0 -> "Left dominant (${-balance})"
+                    else -> "Right dominant (+$balance)"
+                }
+                Text(
+                    text = balanceText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (balance != 0) {
+                TextButton(
+                    onClick = { onBalanceChange(0) },
+                    enabled = isConnected,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("Center", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "L",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (balance < 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = balance.toFloat(),
+                onValueChange = { onBalanceChange(it.roundToInt()) },
+                valueRange = -10f..10f,
+                steps = 19,
+                enabled = isConnected,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "R",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (balance > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun MultipointPanel(
+    isMultipoint: Boolean,
+    isConnected: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    SectionCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Dual-Device Connection",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Multipoint audio connection across two devices",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isMultipoint,
+                onCheckedChange = onToggle,
+                enabled = isConnected
+            )
+        }
+    }
+}
+
+@Composable
+private fun TouchControlsPanel(
+    touchConfig: TouchConfig,
+    isConnected: Boolean,
+    onUpdateConfig: (TouchConfig) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selectedEarbud by remember { mutableStateOf(0) } // 0 = Left, 1 = Right
+    var editingGesture by remember { mutableStateOf<Pair<String, (TouchAction) -> Unit>?>(null) }
+
+    SectionCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Touch Controls",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(2.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (selectedEarbud == 0) MaterialTheme.colorScheme.surface else Color.Transparent)
+                        .clickable { selectedEarbud = 0 }
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        "Left",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (selectedEarbud == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedEarbud == 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (selectedEarbud == 1) MaterialTheme.colorScheme.surface else Color.Transparent)
+                        .clickable { selectedEarbud = 1 }
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        "Right",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (selectedEarbud == 1) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedEarbud == 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (selectedEarbud == 0) {
+            TouchSlotRow("Single Tap", touchConfig.leftSingle, isConnected) {
+                editingGesture = "Left Single Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(leftSingle = action))
+                }
+            }
+            TouchSlotRow("Double Tap", touchConfig.leftDouble, isConnected) {
+                editingGesture = "Left Double Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(leftDouble = action))
+                }
+            }
+            TouchSlotRow("Triple Tap", touchConfig.leftTriple, isConnected) {
+                editingGesture = "Left Triple Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(leftTriple = action))
+                }
+            }
+            TouchSlotRow("Long Press", touchConfig.leftLong, isConnected) {
+                editingGesture = "Left Long Press" to { action ->
+                    onUpdateConfig(touchConfig.copy(leftLong = action))
+                }
+            }
+        } else {
+            TouchSlotRow("Single Tap", touchConfig.rightSingle, isConnected) {
+                editingGesture = "Right Single Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(rightSingle = action))
+                }
+            }
+            TouchSlotRow("Double Tap", touchConfig.rightDouble, isConnected) {
+                editingGesture = "Right Double Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(rightDouble = action))
+                }
+            }
+            TouchSlotRow("Triple Tap", touchConfig.rightTriple, isConnected) {
+                editingGesture = "Right Triple Tap" to { action ->
+                    onUpdateConfig(touchConfig.copy(rightTriple = action))
+                }
+            }
+            TouchSlotRow("Long Press", touchConfig.rightLong, isConnected) {
+                editingGesture = "Right Long Press" to { action ->
+                    onUpdateConfig(touchConfig.copy(rightLong = action))
+                }
+            }
+        }
+    }
+
+    editingGesture?.let { (title, callback) ->
+        AlertDialog(
+            onDismissRequest = { editingGesture = null },
+            title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TouchAction.entries.forEach { action ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    callback(action)
+                                    editingGesture = null
+                                },
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = action.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { editingGesture = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TouchSlotRow(
+    gesture: String,
+    action: TouchAction,
+    isConnected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = gesture,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Surface(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(enabled = isConnected, onClick = onClick),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Text(
+                text = action.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeviceActionsPanel(
+    isConnected: Boolean,
+    onResetEq: () -> Unit,
+    onPowerOff: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showPowerOffConfirm by remember { mutableStateOf(false) }
+
+    SectionCard(modifier = modifier) {
+        Text(
+            text = "Earbud Controls",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onResetEq,
+                enabled = isConnected,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Reset EQ", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = { showPowerOffConfirm = true },
+                enabled = isConnected,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Power Off", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+
+    if (showPowerOffConfirm) {
+        AlertDialog(
+            onDismissRequest = { showPowerOffConfirm = false },
+            title = { Text("Power Off Earbuds") },
+            text = { Text("Are you sure you want to shut down the TOZO AeroSound 3 earbuds?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPowerOffConfirm = false
+                        onPowerOff()
+                    }
+                ) {
+                    Text("Power Off", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPowerOffConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
