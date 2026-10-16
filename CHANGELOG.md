@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated GATT Service UUID to authentic JieLi profile `0000b610-0000-1000-8000-00805f9b34fb`, TX `0xB611`, and RX `0xB612`.
 - Enhanced BLE scan matching to recognize TOZO AeroSound manufacturer data frames (`WR`/`WOER` marker).
 
+### Fixed
+- Fixed noise cancellation mode persistence across reconnects: added `SET_DSP_BOOT_UP_ANC_MODE` (`0x1011`) for hardware NVRAM storage (`isRememberType`) and migrated reconnect query to 5-mode status register `GET_DEVICE_ANC_MODE` (`0x0028`).
+
 ## [1.1.1] - 2026-09-27
 ### Changed
 - Replaced 10-band vertical fader rack with an interactive graphic equalizer spline curve.
