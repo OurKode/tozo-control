@@ -13,6 +13,20 @@ class MainScreenViewModelTest {
         assertEquals("1008010101", NoiseMode.LEISURE.hexCmd)
         assertEquals("1007010101", NoiseMode.REDUCE_WIND.hexCmd)
         assertEquals("1004010000", NoiseMode.NORMAL.hexCmd)
+
+        // Boot-up persistence packets (SET_DSP_BOOT_UP_ANC_MODE)
+        assertEquals("1011010101", NoiseMode.ANC.bootHexCmd)
+        assertEquals("1011010202", NoiseMode.TRANSPARENCY.bootHexCmd)
+        assertEquals("1011010404", NoiseMode.LEISURE.bootHexCmd)
+        assertEquals("1011010303", NoiseMode.REDUCE_WIND.bootHexCmd)
+        assertEquals("1011010000", NoiseMode.NORMAL.bootHexCmd)
+
+        // Opcode mapping
+        assertEquals(NoiseMode.NORMAL, NoiseMode.fromCode(0))
+        assertEquals(NoiseMode.ANC, NoiseMode.fromCode(1))
+        assertEquals(NoiseMode.TRANSPARENCY, NoiseMode.fromCode(2))
+        assertEquals(NoiseMode.REDUCE_WIND, NoiseMode.fromCode(3))
+        assertEquals(NoiseMode.LEISURE, NoiseMode.fromCode(4))
     }
 
     @Test

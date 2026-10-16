@@ -17,12 +17,16 @@ import kotlinx.coroutines.sync.withLock
 import java.util.*
 import kotlin.math.roundToInt
 
-enum class NoiseMode(val label: String, val hexCmd: String) {
-    ANC("ANC", "1004010101"),
-    TRANSPARENCY("Transparency", "1005010101"),
-    LEISURE("Leisure", "1008010101"),
-    REDUCE_WIND("Reduce Wind", "1007010101"),
-    NORMAL("Normal", "1004010000")
+enum class NoiseMode(val code: Int, val label: String, val hexCmd: String, val bootHexCmd: String) {
+    NORMAL(0, "Normal", "1004010000", "1011010000"),
+    ANC(1, "ANC", "1004010101", "1011010101"),
+    TRANSPARENCY(2, "Transparency", "1005010101", "1011010202"),
+    REDUCE_WIND(3, "Reduce Wind", "1007010101", "1011010303"),
+    LEISURE(4, "Leisure", "1008010101", "1011010404");
+
+    companion object {
+        fun fromCode(code: Int): NoiseMode = entries.firstOrNull { it.code == code } ?: NORMAL
+    }
 }
 
 enum class TouchAction(val code: Byte, val label: String) {
@@ -453,15 +457,17 @@ class TozoBleManager(private val context: Context) {
                             delay(300)
                             // Query hardware state directly from earbud registers
                             sendHex("00010000", "Read Firmware")
-                            delay(200)
+                            delay(150)
                             sendHex("00020000", "Read Battery")
-                            delay(200)
+                            delay(150)
                             sendHex("00060000", "Read Game Mode")
-                            delay(200)
-                            sendHex("00040000", "Read Noise Mode")
-                            delay(200)
+                            delay(150)
+                            sendHex("00280000", "Read Active Noise Mode")
+                            delay(150)
+                            sendHex("00110000", "Read Boot Noise Mode")
+                            delay(150)
                             sendHex("000b0000", "Read Equalizer Status")
-                            delay(200)
+                            delay(150)
                             sendHex("00030000", "Read Touch Config")
                         }
                     }
@@ -512,21 +518,56 @@ class TozoBleManager(private val context: Context) {
             _isGameMode.value = (data[3].toInt() == 1)
         }
         // 4. Noise Mode:
-        else if ((hexStr.startsWith("000401") || hexStr.startsWith("201101")) && data.size >= 4) {
-            val modeCode = data[3].toInt()
-            when (modeCode) {
-                1 -> _currentNoiseMode.value = NoiseMode.ANC
-                0 -> _currentNoiseMode.value = NoiseMode.NORMAL
+        // 4a. True 5-mode status: 00 28 01 [mode] [chk] or 20 30 01 [mode] [chk]
+        else if ((hexStr.startsWith("002801") || hexStr.startsWith("203001")) && data.size >= 4) {
+            val mode = NoiseMode.fromCode(data[3].toInt())
+            _currentNoiseMode.value = mode
+            prefs.edit().putString("last_noise_mode", mode.name).apply()
+        }
+        // 4b. Boot-up ANC mode: 00 11 01 [mode] [chk]
+        else if (hexStr.startsWith("001101") && data.size >= 4) {
+            val mode = NoiseMode.fromCode(data[3].toInt())
+            if (_currentNoiseMode.value == NoiseMode.NORMAL && mode != NoiseMode.NORMAL) {
+                _currentNoiseMode.value = mode
+                prefs.edit().putString("last_noise_mode", mode.name).apply()
             }
         }
-        else if ((hexStr.startsWith("000501") || hexStr.startsWith("201001")) && data.size >= 4 && data[3].toInt() == 1) {
-            _currentNoiseMode.value = NoiseMode.TRANSPARENCY
+        // 4c. Individual mode autonomous events or responses:
+        else if ((hexStr.startsWith("000401") || hexStr.startsWith("201101")) && data.size >= 4) {
+            if (data[3].toInt() == 1) {
+                _currentNoiseMode.value = NoiseMode.ANC
+                prefs.edit().putString("last_noise_mode", NoiseMode.ANC.name).apply()
+            } else if (_currentNoiseMode.value == NoiseMode.ANC) {
+                _currentNoiseMode.value = NoiseMode.NORMAL
+                prefs.edit().putString("last_noise_mode", NoiseMode.NORMAL.name).apply()
+            }
         }
-        else if ((hexStr.startsWith("000701") || hexStr.startsWith("201301")) && data.size >= 4 && data[3].toInt() == 1) {
-            _currentNoiseMode.value = NoiseMode.REDUCE_WIND
+        else if ((hexStr.startsWith("000501") || hexStr.startsWith("201001")) && data.size >= 4) {
+            if (data[3].toInt() == 1) {
+                _currentNoiseMode.value = NoiseMode.TRANSPARENCY
+                prefs.edit().putString("last_noise_mode", NoiseMode.TRANSPARENCY.name).apply()
+            } else if (_currentNoiseMode.value == NoiseMode.TRANSPARENCY) {
+                _currentNoiseMode.value = NoiseMode.NORMAL
+                prefs.edit().putString("last_noise_mode", NoiseMode.NORMAL.name).apply()
+            }
         }
-        else if ((hexStr.startsWith("000801") || hexStr.startsWith("201401")) && data.size >= 4 && data[3].toInt() == 1) {
-            _currentNoiseMode.value = NoiseMode.LEISURE
+        else if ((hexStr.startsWith("000701") || hexStr.startsWith("201301")) && data.size >= 4) {
+            if (data[3].toInt() == 1) {
+                _currentNoiseMode.value = NoiseMode.REDUCE_WIND
+                prefs.edit().putString("last_noise_mode", NoiseMode.REDUCE_WIND.name).apply()
+            } else if (_currentNoiseMode.value == NoiseMode.REDUCE_WIND) {
+                _currentNoiseMode.value = NoiseMode.NORMAL
+                prefs.edit().putString("last_noise_mode", NoiseMode.NORMAL.name).apply()
+            }
+        }
+        else if ((hexStr.startsWith("000801") || hexStr.startsWith("201401")) && data.size >= 4) {
+            if (data[3].toInt() == 1) {
+                _currentNoiseMode.value = NoiseMode.LEISURE
+                prefs.edit().putString("last_noise_mode", NoiseMode.LEISURE.name).apply()
+            } else if (_currentNoiseMode.value == NoiseMode.LEISURE) {
+                _currentNoiseMode.value = NoiseMode.NORMAL
+                prefs.edit().putString("last_noise_mode", NoiseMode.NORMAL.name).apply()
+            }
         }
         // 5. EQ Status: 00 0b 14 [10 bytes] ... or 20 12 14 [10 bytes] ...
         else if ((hexStr.startsWith("000b14") || hexStr.startsWith("201214")) && data.size >= 13) {
@@ -592,7 +633,13 @@ class TozoBleManager(private val context: Context) {
         if (!_isConnected.value || writeChar == null) return
         _currentNoiseMode.value = mode
         prefs.edit().putString("last_noise_mode", mode.name).apply()
+        // 1. Send active DSP noise cancellation mode switch
         sendHex(mode.hexCmd, "Mode ${mode.label}")
+        // 2. Persist to earbud NVRAM for boot-up / reconnect memory (isRememberType: CA0D)
+        scope.launch {
+            delay(120)
+            sendHex(mode.bootHexCmd, "Persist Boot Mode ${mode.label}")
+        }
     }
 
     fun setEqGains(gainsDb: List<Float>) {
