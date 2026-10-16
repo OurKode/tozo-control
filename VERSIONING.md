@@ -55,6 +55,7 @@ defaultConfig {
 | `1.1.0` | 1 | 1 | 0 | `10100` | Minor: UI redesign, R8 shrinking, tablet layout |
 | `1.1.1` | 1 | 1 | 1 | `10101` | Patch: Zero-overflow graphic equalizer spline curve |
 | `1.2.0` | 1 | 2 | 0 | `10200` | Minor: TOZO AeroSound 3 reverse-engineered protocol (touch gesture remapping, hardware DSP reset, power off) |
+| `1.3.0` | 1 | 3 | 0 | `10300` | Minor: 20 authentic TOZO hardware DSP equalizer presets suite |
 | `2.0.0` | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
 
 ---

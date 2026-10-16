@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-10-16
+## [1.3.0] - 2026-10-16
+### Added
+- Expanded Studio Equalizer preset collection from 5 to 20 authentic TOZO hardware curves extracted from `DeviceValueContainer`:
+  - Added Pop, Rock, Classical, Jazz, Vocal, Electronic, Hip-Hop, R&B, Dance, Deep, Blues, Metal, Piano, Podcast, Bass -, Treble -, and preserved Flat, Bass +, Treble +, and Acoustic.
+  - Full backward compatibility alias preservation for previously stored custom profile names.
+
 ### Added
 - Reverse-engineered TOZO AeroSound 3 (`CA0D` / JieLi SoC) command protocol integration:
   - Touch gesture remapping for Left and Right earbuds (Single, Double, Triple, Long Press with 9 configurable actions).

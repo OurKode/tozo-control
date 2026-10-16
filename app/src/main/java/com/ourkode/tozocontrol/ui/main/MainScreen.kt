@@ -63,14 +63,39 @@ import kotlin.math.roundToInt
 val FREQ_LABELS = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
 
 val PRESET_MAP = mapOf(
-    "Flat" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
-    "Bass Boost" to listOf(6.0f, 5.0f, 4.0f, 2.0f, 0f, 0f, 0f, 0f, 1.0f, 2.0f),
-    "Treble Boost" to listOf(0f, 0f, 0f, 0f, 0f, 1.0f, 2.0f, 3.5f, 5.0f, 6.0f),
-    "Vocal Focus" to listOf(-1.0f, 0f, 1.5f, 3.0f, 4.0f, 4.0f, 2.5f, 1.0f, 0f, -1.0f),
-    "Acoustic" to listOf(2.0f, 1.5f, 0.5f, 0f, 0f, 0.5f, 1.5f, 2.0f, 1.5f, 1.0f)
+    "Flat" to listOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+    "Bass +" to listOf(2.0f, 2.0f, 2.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+    "Bass -" to listOf(-2.0f, -2.0f, -2.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+    "Treble +" to listOf(-1.5f, -1.5f, -1.5f, -1.0f, -1.0f, -1.0f, 1.0f, 2.0f, 3.0f, 4.0f),
+    "Treble -" to listOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -2.0f, -3.0f, -3.0f, -3.0f, -4.0f),
+    "Pop" to listOf(-1.0f, -1.0f, -1.0f, 1.0f, 3.0f, 3.0f, 1.0f, -1.0f, -2.0f, -3.0f),
+    "Rock" to listOf(1.5f, 1.5f, 1.5f, 2.0f, -1.0f, -1.0f, 1.0f, 2.0f, 2.0f, 2.0f),
+    "Classical" to listOf(2.0f, 1.5f, 1.5f, 1.5f, -2.0f, -2.0f, 0.0f, 2.0f, 3.0f, 3.0f),
+    "Jazz" to listOf(1.0f, 1.0f, 2.0f, 2.0f, -2.0f, -2.0f, 0.0f, 2.0f, 3.0f, 2.0f),
+    "Vocal" to listOf(-2.0f, -2.0f, -2.0f, -2.0f, 1.0f, 2.0f, 2.0f, 1.0f, 0.0f, -3.0f),
+    "Electronic" to listOf(2.3f, 2.3f, 1.8f, 1.0f, -2.4f, 1.0f, 0.1f, 1.0f, 1.8f, 1.8f),
+    "Hip-Hop" to listOf(1.0f, 1.0f, 1.0f, 2.0f, -1.0f, -1.0f, 2.0f, -1.0f, 2.0f, 2.0f),
+    "R&B" to listOf(3.4f, 3.4f, 3.4f, 0.1f, -3.3f, -3.3f, 0.1f, 0.9f, 0.9f, 1.7f),
+    "Dance" to listOf(1.0f, 1.0f, 1.0f, -2.0f, -1.0f, 1.0f, 2.0f, 2.0f, 1.0f, -3.0f),
+    "Deep" to listOf(1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 3.0f, 2.0f, -2.0f, -3.0f, -3.0f),
+    "Blues" to listOf(3.0f, 3.0f, 3.0f, 1.0f, -2.0f, -2.0f, 2.0f, 2.0f, 3.0f, 3.0f),
+    "Metal" to listOf(-1.3f, 2.6f, 1.7f, -1.3f, -1.3f, -0.4f, 0.8f, 1.8f, -0.1f, 2.2f),
+    "Piano" to listOf(0.0f, 0.0f, 0.0f, 2.0f, 3.0f, 2.0f, 3.0f, 3.0f, 2.0f, 2.0f),
+    "Podcast" to listOf(-3.0f, -3.0f, -2.5f, 1.7f, 3.3f, 3.3f, 2.5f, 1.7f, 0.0f, -1.7f),
+    "Acoustic" to listOf(2.0f, 1.5f, 0.5f, 0.0f, 0.0f, 0.5f, 1.5f, 2.0f, 1.5f, 1.0f),
+    // Backward compatibility aliases for previous user preferences
+    "Bass Boost" to listOf(2.0f, 2.0f, 2.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+    "Treble Boost" to listOf(-1.5f, -1.5f, -1.5f, -1.0f, -1.0f, -1.0f, 1.0f, 2.0f, 3.0f, 4.0f),
+    "Vocal Focus" to listOf(-2.0f, -2.0f, -2.0f, -2.0f, 1.0f, 2.0f, 2.0f, 1.0f, 0.0f, -3.0f)
 )
 
-val PRESET_NAMES = listOf("Flat", "Bass Boost", "Treble Boost", "Vocal Focus", "Acoustic", "Custom")
+val PRESET_NAMES = listOf(
+    "Flat", "Bass +", "Bass -", "Treble +", "Treble -",
+    "Pop", "Rock", "Classical", "Jazz", "Vocal",
+    "Electronic", "Hip-Hop", "R&B", "Dance", "Deep",
+    "Blues", "Metal", "Piano", "Podcast", "Acoustic",
+    "Custom"
+)
 
 private enum class MobileScreenTab(val label: String) {
     CONTROLS("Controls"),
