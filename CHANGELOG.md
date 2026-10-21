@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Dynamic Color (Material You) theme support for Android 12+ (API 31+) with fallback to Warm Editorial and Studio Dark schemes.
+- Material 3 Expressive spring motion physics for tactile 10-band equalizer curve interpolation and preset morphing.
+- Smooth animated color state transitions for noise cancellation mode tiles and equalizer preset pills.
+- Comprehensive design specification in DESIGN.md detailing identity, typography, telemetry colors, and motion dials.
+
 
 ## [1.3.0] - 2026-10-16
 ### Added

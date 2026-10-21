@@ -24,7 +24,9 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     setContent {
       var isDark by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
-      TOZOControlTheme(darkTheme = isDark) {
+      val dynamicColor by remember { mutableStateOf(prefs.getBoolean("dynamic_color", true)) }
+
+      TOZOControlTheme(darkTheme = isDark, dynamicColor = dynamicColor) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
           MainNavigation(
             isDark = isDark,
