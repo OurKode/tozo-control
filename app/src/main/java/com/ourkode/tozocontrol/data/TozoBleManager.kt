@@ -62,6 +62,15 @@ class TozoBleManager(private val context: Context) {
     companion object {
         const val TAG = "TozoBleManager"
 
+        @Volatile
+        private var INSTANCE: TozoBleManager? = null
+
+        fun getInstance(context: Context): TozoBleManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: TozoBleManager(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+
         val SERVICE_UUID: UUID = UUID.fromString("0000b610-0000-1000-8000-00805f9b34fb")
         val WRITE_UUID: UUID = UUID.fromString("0000b611-0000-1000-8000-00805f9b34fb")
         val NOTIFY_UUID: UUID = UUID.fromString("0000b612-0000-1000-8000-00805f9b34fb")
