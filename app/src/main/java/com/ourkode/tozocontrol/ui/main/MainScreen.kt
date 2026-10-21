@@ -947,10 +947,26 @@ private fun NoiseModeTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    val titleCol = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    val subCol = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(200),
+        label = "noise_tile_bg_$title"
+    )
+    val borderCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        animationSpec = tween(200),
+        label = "noise_tile_border_$title"
+    )
+    val titleCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(200),
+        label = "noise_tile_title_$title"
+    )
+    val subCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "noise_tile_sub_$title"
+    )
 
     Box(
         modifier = modifier
@@ -1144,9 +1160,21 @@ private fun EqualizerPanel(
         ) {
             PRESET_NAMES.forEach { presetName ->
                 val isSelected = activePreset == presetName
-                val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                val fg = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                val bg by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    animationSpec = tween(200),
+                    label = "preset_bg_$presetName"
+                )
+                val borderCol by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    animationSpec = tween(200),
+                    label = "preset_border_$presetName"
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    animationSpec = tween(200),
+                    label = "preset_fg_$presetName"
+                )
 
                 Box(
                     modifier = Modifier
@@ -1200,6 +1228,19 @@ private fun InteractiveGraphicEq(
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
     val primaryColor = MaterialTheme.colorScheme.primary
+
+    // M3 Expressive tactile spring animation for all 10 hardware EQ bands
+    val animatedGains = (0..9).map { index ->
+        val target = eqGains.getOrElse(index) { 0f }.coerceIn(-10f, 10f)
+        animateFloatAsState(
+            targetValue = target,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "band_fader_$index"
+        ).value
+    }
 
     Column(modifier = modifier) {
         // 1. Interactive Graphic Curve Canvas Container
@@ -1327,7 +1368,7 @@ private fun InteractiveGraphicEq(
                         topLeft = Offset(x - textLayout.size.width / 2f, size.height - bottomPad + 5.dp.toPx())
                     )
 
-                    val gain = eqGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
+                    val gain = animatedGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
                     val norm = (gain + 10f) / 20f
                     val y = topPad + (1f - norm) * usableHeight
                     points.add(Offset(x, y))
