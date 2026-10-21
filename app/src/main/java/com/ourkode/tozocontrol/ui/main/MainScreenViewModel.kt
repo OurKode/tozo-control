@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
-    val bleManager = TozoBleManager(application.applicationContext)
+    val bleManager = TozoBleManager.getInstance(application.applicationContext)
 
     val isConnected = bleManager.isConnected
     val isConnecting = bleManager.isConnecting

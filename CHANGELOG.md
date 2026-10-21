@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Quick Settings Tiles for Android notification shade: `TozoNoiseTileService` (cycling ANC, Transparency, Normal) and `TozoGameModeTileService` (toggle 45 ms low latency).
+- On-demand BLE GATT link execution within tile lifecycle, maintaining zero background battery drain.
+- Thread-safe singleton accessor `TozoBleManager.getInstance()` synchronized across UI ViewModels and system TileServices.
 - Dynamic Color (Material You) theme support for Android 12+ (API 31+) with fallback to Warm Editorial and Studio Dark schemes.
 - Material 3 Expressive spring motion physics for tactile 10-band equalizer curve interpolation and preset morphing.
 - Smooth animated color state transitions for noise cancellation mode tiles and equalizer preset pills.
