@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-23
+### Added
+- Quick Settings Tiles for Android notification shade: `TozoNoiseTileService` (cycling ANC, Transparency, Normal) and `TozoGameModeTileService` (toggle 45 ms low latency).
+- On-demand BLE GATT link execution within tile lifecycle, maintaining zero background battery drain.
+- Thread-safe singleton accessor `TozoBleManager.getInstance()` synchronized across UI ViewModels and system TileServices.
+- Dynamic Color (Material You) theme support for Android 12+ (API 31+) with fallback to Warm Editorial and Studio Dark schemes.
+- Material 3 Expressive spring motion physics for tactile 10-band equalizer curve interpolation and preset morphing.
+- Smooth animated color state transitions for noise cancellation mode tiles and equalizer preset pills.
+- Comprehensive design specification in DESIGN.md detailing identity, typography, telemetry colors, and motion dials.
+
+### Fixed
+- Fixed Quick Settings Tiles interaction when app is killed or removed from Recents by avoiding `STATE_UNAVAILABLE` and executing queued mode commands on connection.
+- Fixed unnecessary app reconnection by preserving cached MAC address across disconnect events and prioritizing verified GATT MAC over bonded audio MACs.
+- Fixed Quick Tile label to directly display active noise profile ("ANC", "Pass", or "Normal") with responsive connection subtitle.
+- Removed premature BLE GATT teardown from ViewModel `onCleared()` to allow background Quick Tiles to operate seamlessly.
+- Fixed TWS state desync when reopening app from Recents by handling `onDescriptorWrite` callback before sending queries and refreshing telemetry on app resume.
+- Shortened device sub-header to clean MAC display and simplified Equalizer, Noise Control, and Game Mode subtitles per antislop copywriting standards.
+- Redesigned Equalizer controls into prominent tactile buttons: 10-band interactive button strip, tactile stepper buttons (-0.5 dB, 0 dB, +0.5 dB), slider scrubber, Prev/Next navigation, and elevated preset pill chips.
+
+
 ## [1.3.0] - 2026-10-16
 ### Added
 - Expanded Studio Equalizer preset collection from 5 to 20 authentic TOZO hardware curves extracted from `DeviceValueContainer`:

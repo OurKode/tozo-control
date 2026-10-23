@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">TOZO Control</string>
+    <string name="tile_noise_label">Noise Control</string>
+    <string name="tile_game_label">Game Mode</string>
 </resources>
