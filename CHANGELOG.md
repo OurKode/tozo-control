@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed premature BLE GATT teardown from ViewModel `onCleared()` to allow background Quick Tiles to operate seamlessly.
 - Fixed TWS state desync when reopening app from Recents by handling `onDescriptorWrite` callback before sending queries and refreshing telemetry on app resume.
 - Shortened device sub-header to clean MAC display and simplified Equalizer, Noise Control, and Game Mode subtitles per antislop copywriting standards.
+- Redesigned Equalizer controls into prominent tactile buttons: 10-band interactive button strip, tactile stepper buttons (-0.5 dB, 0 dB, +0.5 dB), slider scrubber, Prev/Next navigation, and elevated preset pill chips.
 
 
 ## [1.3.0] - 2026-10-16
