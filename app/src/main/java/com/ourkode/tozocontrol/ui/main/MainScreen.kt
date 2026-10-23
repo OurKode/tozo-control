@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -198,6 +200,12 @@ fun MainScreen(
             } else {
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
             }
+        }
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (isConnected) {
+            viewModel.queryDeviceTelemetry()
         }
     }
 
@@ -552,7 +560,7 @@ private fun TopDeviceBar(
                     )
                     Text(
                         text = when {
-                            isConnected -> "BLE 5.3 Linked  •  $macAddress"
+                            isConnected -> if (macAddress.isNotBlank() && macAddress != "Auto-Discovery") macAddress else "Connected"
                             isConnecting -> if (statusText.isNotBlank()) statusText else "Connecting..."
                             else -> "Disconnected"
                         },
@@ -882,7 +890,7 @@ private fun NoiseIsolationPanel(
 
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Hardware microphone phase cancellation profiles",
+            text = "ANC and ambient sound modes",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -947,10 +955,26 @@ private fun NoiseModeTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    val titleCol = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    val subCol = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(200),
+        label = "noise_tile_bg_$title"
+    )
+    val borderCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        animationSpec = tween(200),
+        label = "noise_tile_border_$title"
+    )
+    val titleCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(200),
+        label = "noise_tile_title_$title"
+    )
+    val subCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "noise_tile_sub_$title"
+    )
 
     Box(
         modifier = modifier
@@ -1025,9 +1049,9 @@ private fun LowLatencyPanel(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (isGameMode && isConnected) {
-                        "45ms synchronous buffer engaged for gaming and video"
+                        "45ms low latency for gaming and video"
                     } else {
-                        "Standard transmission buffer engaged for baseline battery life"
+                        "Standard latency"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1078,7 +1102,7 @@ private fun EqualizerPanel(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "10-Band DSP hardware filters (-10.0 to +10.0 dB)",
+                    text = "10-Band DSP (±10 dB)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1144,27 +1168,50 @@ private fun EqualizerPanel(
         ) {
             PRESET_NAMES.forEach { presetName ->
                 val isSelected = activePreset == presetName
-                val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                val borderCol = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                val fg = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                val bg by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    animationSpec = tween(200),
+                    label = "preset_bg_$presetName"
+                )
+                val borderCol by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    animationSpec = tween(200),
+                    label = "preset_border_$presetName"
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    animationSpec = tween(200),
+                    label = "preset_fg_$presetName"
+                )
 
-                Box(
-                    modifier = Modifier
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(bg)
-                        .border(1.dp, borderCol, RoundedCornerShape(8.dp))
-                        .clickable { onSelectPreset(presetName) }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    onClick = { onSelectPreset(presetName) },
+                    shape = RoundedCornerShape(8.dp),
+                    color = bg,
+                    border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderCol),
+                    modifier = Modifier.height(40.dp)
                 ) {
-                    Text(
-                        text = presetName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = fg,
-                        maxLines = 1
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(fg)
+                            )
+                        }
+                        Text(
+                            text = presetName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = fg,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -1200,6 +1247,19 @@ private fun InteractiveGraphicEq(
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
     val primaryColor = MaterialTheme.colorScheme.primary
+
+    // M3 Expressive tactile spring animation for all 10 hardware EQ bands
+    val animatedGains = (0..9).map { index ->
+        val target = eqGains.getOrElse(index) { 0f }.coerceIn(-10f, 10f)
+        animateFloatAsState(
+            targetValue = target,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "band_fader_$index"
+        ).value
+    }
 
     Column(modifier = modifier) {
         // 1. Interactive Graphic Curve Canvas Container
@@ -1327,7 +1387,7 @@ private fun InteractiveGraphicEq(
                         topLeft = Offset(x - textLayout.size.width / 2f, size.height - bottomPad + 5.dp.toPx())
                     )
 
-                    val gain = eqGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
+                    val gain = animatedGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
                     val norm = (gain + 10f) / 20f
                     val y = topPad + (1f - norm) * usableHeight
                     points.add(Offset(x, y))
@@ -1378,13 +1438,13 @@ private fun InteractiveGraphicEq(
                     val isSelected = i == selectedBandIndex
 
                     if (isSelected) {
-                        drawCircle(primaryColor.copy(alpha = 0.22f), radius = 10.dp.toPx(), center = pt)
-                        drawCircle(primaryColor, radius = 5.5.dp.toPx(), center = pt)
-                        drawCircle(surfaceColor, radius = 2.dp.toPx(), center = pt)
+                        drawCircle(primaryColor.copy(alpha = 0.25f), radius = 12.dp.toPx(), center = pt)
+                        drawCircle(primaryColor, radius = 6.5.dp.toPx(), center = pt)
+                        drawCircle(surfaceColor, radius = 2.5.dp.toPx(), center = pt)
                     } else {
-                        drawCircle(surfaceColor, radius = 4.dp.toPx(), center = pt)
-                        drawCircle(outlineColor, radius = 4.dp.toPx(), center = pt, style = Stroke(1.5.dp.toPx()))
-                        drawCircle(primaryColor.copy(alpha = 0.65f), radius = 1.75.dp.toPx(), center = pt)
+                        drawCircle(surfaceColor, radius = 4.5.dp.toPx(), center = pt)
+                        drawCircle(outlineColor, radius = 4.5.dp.toPx(), center = pt, style = Stroke(1.5.dp.toPx()))
+                        drawCircle(primaryColor.copy(alpha = 0.7f), radius = 1.75.dp.toPx(), center = pt)
                     }
                 }
 
@@ -1435,9 +1495,80 @@ private fun InteractiveGraphicEq(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // 2. Precision Companion Step Control Bar
+        // 2. 10-Band Frequency Selector Buttons (Instant direct band switching)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Frequency Bands",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = onSurfaceVariantColor
+            )
+            Text(
+                text = "Tap to select",
+                style = MaterialTheme.typography.labelSmall,
+                color = onSurfaceVariantColor.copy(alpha = 0.7f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            (0..9).forEach { bandIdx ->
+                val isSelected = bandIdx == selectedBandIndex
+                val gainVal = eqGains.getOrElse(bandIdx) { 0f }
+                val gainStr = "${if (gainVal > 0) "+" else ""}${"%.1f".format(gainVal)}"
+                val freqLbl = FREQ_LABELS[bandIdx]
+
+                Surface(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedBandIndex = bandIdx
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSelected) primaryColor else surfaceVariantColor,
+                    border = BorderStroke(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) primaryColor else outlineColor
+                    ),
+                    modifier = Modifier.defaultMinSize(minWidth = 54.dp, minHeight = 48.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = freqLbl,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else onSurfaceColor
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = gainStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f) else onSurfaceVariantColor
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 3. Tactile Band Fine-Tuning Card with Slider & Steppers
         val selectedGain = eqGains.getOrElse(selectedBandIndex) { 0f }
         val selectedFreqLabel = FREQ_LABELS.getOrElse(selectedBandIndex) { "" }
         val formattedFreq = if (selectedFreqLabel.endsWith("k")) {
@@ -1448,23 +1579,22 @@ private fun InteractiveGraphicEq(
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            color = surfaceVariantColor,
+            shape = RoundedCornerShape(12.dp),
+            color = surfaceVariantColor.copy(alpha = 0.45f),
             border = BorderStroke(1.dp, outlineColor)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(14.dp)
             ) {
-                // Band Navigator: [<]  1 kHz : +3.5 dB  [>]
+                // Row 1: Prev Band [<], Active Frequency & dB, Next Band [>]
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
+                    FilledTonalButton(
                         onClick = {
                             if (selectedBandIndex > 0) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1472,35 +1602,33 @@ private fun InteractiveGraphicEq(
                             }
                         },
                         enabled = enabled && selectedBandIndex > 0,
-                        modifier = Modifier.size(32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
                     ) {
                         Text(
-                            text = "<",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedBandIndex > 0) onSurfaceColor else outlineColor
+                            text = "< Prev",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.widthIn(min = 60.dp)
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = formattedFreq,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Medium,
                             color = onSurfaceVariantColor
                         )
                         Text(
                             text = "${if (selectedGain > 0) "+" else ""}${"%.1f".format(selectedGain)} dB",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = onSurfaceColor
                         )
                     }
 
-                    IconButton(
+                    FilledTonalButton(
                         onClick = {
                             if (selectedBandIndex < 9) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1508,74 +1636,111 @@ private fun InteractiveGraphicEq(
                             }
                         },
                         enabled = enabled && selectedBandIndex < 9,
-                        modifier = Modifier.size(32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
                     ) {
                         Text(
-                            text = ">",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedBandIndex < 9) onSurfaceColor else outlineColor
+                            text = "Next >",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Quick Gain Step Adjusters: [-0.5]  [0 dB]  [+0.5]
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Interactive Slider
+                Slider(
+                    value = selectedGain,
+                    onValueChange = { newVal ->
+                        val rounded = (newVal * 2).roundToInt() / 2.0f
+                        if (rounded != selectedGain) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            currentOnGainChange(selectedBandIndex, rounded)
+                        }
+                    },
+                    valueRange = -10.0f..10.0f,
+                    steps = 39,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Row 2: Tactile Stepper Buttons
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // -0.5 dB
-                    OutlinedButton(
+                    // Decrement: -0.5 dB
+                    Button(
                         onClick = {
                             val newG = (selectedGain - 0.5f).coerceAtLeast(-10.0f)
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             currentOnGainChange(selectedBandIndex, newG)
                         },
                         enabled = enabled && selectedGain > -10.0f,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = surfaceColor,
+                            contentColor = onSurfaceColor
+                        ),
+                        border = BorderStroke(1.dp, outlineColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 42.dp)
                     ) {
                         Text(
-                            text = "-0.5",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "-0.5 dB",
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    // 0 dB Reset
+                    // Reset: 0 dB
                     OutlinedButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             currentOnGainChange(selectedBandIndex, 0.0f)
                         },
                         enabled = enabled && selectedGain != 0.0f,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 42.dp)
                     ) {
                         Text(
                             text = "0 dB",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    // +0.5 dB
-                    OutlinedButton(
+                    // Increment: +0.5 dB
+                    Button(
                         onClick = {
                             val newG = (selectedGain + 0.5f).coerceAtMost(10.0f)
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             currentOnGainChange(selectedBandIndex, newG)
                         },
                         enabled = enabled && selectedGain < 10.0f,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 38.dp, minHeight = 32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = surfaceColor,
+                            contentColor = onSurfaceColor
+                        ),
+                        border = BorderStroke(1.dp, outlineColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 42.dp)
                     ) {
                         Text(
-                            text = "+0.5",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "+0.5 dB",
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

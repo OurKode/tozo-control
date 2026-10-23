@@ -102,4 +102,20 @@ class MainScreenViewModelTest {
         assertEquals(com.ourkode.tozocontrol.data.TouchAction.ANC_SWITCH, parsed.rightTriple)
         assertEquals(com.ourkode.tozocontrol.data.TouchAction.VOLUME_UP, parsed.rightLong)
     }
+
+    @Test
+    fun tile_noiseModeCycle_advancesCorrectly() {
+        fun nextMode(current: NoiseMode): NoiseMode = when (current) {
+            NoiseMode.ANC -> NoiseMode.TRANSPARENCY
+            NoiseMode.TRANSPARENCY -> NoiseMode.NORMAL
+            NoiseMode.NORMAL -> NoiseMode.ANC
+            else -> NoiseMode.ANC
+        }
+
+        assertEquals(NoiseMode.TRANSPARENCY, nextMode(NoiseMode.ANC))
+        assertEquals(NoiseMode.NORMAL, nextMode(NoiseMode.TRANSPARENCY))
+        assertEquals(NoiseMode.ANC, nextMode(NoiseMode.NORMAL))
+        assertEquals(NoiseMode.ANC, nextMode(NoiseMode.LEISURE))
+        assertEquals(NoiseMode.ANC, nextMode(NoiseMode.REDUCE_WIND))
+    }
 }

@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
-    val bleManager = TozoBleManager(application.applicationContext)
+    val bleManager = TozoBleManager.getInstance(application.applicationContext)
 
     val isConnected = bleManager.isConnected
     val isConnecting = bleManager.isConnecting
@@ -45,6 +45,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun connect(mac: String? = null) {
         bleManager.connect(mac)
+    }
+
+    fun queryDeviceTelemetry() {
+        bleManager.queryDeviceTelemetry()
     }
 
     fun disconnect() {
@@ -107,6 +111,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         super.onCleared()
-        bleManager.disconnect()
+        // Retain BLE link so Quick Settings Tiles can continue controlling hardware without reconnect delays
     }
 }
