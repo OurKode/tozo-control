@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -198,6 +200,12 @@ fun MainScreen(
             } else {
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
             }
+        }
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (isConnected) {
+            viewModel.queryDeviceTelemetry()
         }
     }
 
@@ -552,7 +560,7 @@ private fun TopDeviceBar(
                     )
                     Text(
                         text = when {
-                            isConnected -> "BLE 5.3 Linked  •  $macAddress"
+                            isConnected -> if (macAddress.isNotBlank() && macAddress != "Auto-Discovery") macAddress else "Connected"
                             isConnecting -> if (statusText.isNotBlank()) statusText else "Connecting..."
                             else -> "Disconnected"
                         },
@@ -882,7 +890,7 @@ private fun NoiseIsolationPanel(
 
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Hardware microphone phase cancellation profiles",
+            text = "ANC and ambient sound modes",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1041,9 +1049,9 @@ private fun LowLatencyPanel(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = if (isGameMode && isConnected) {
-                        "45ms synchronous buffer engaged for gaming and video"
+                        "45ms low latency for gaming and video"
                     } else {
-                        "Standard transmission buffer engaged for baseline battery life"
+                        "Standard latency"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1094,7 +1102,7 @@ private fun EqualizerPanel(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "10-Band DSP hardware filters (-10.0 to +10.0 dB)",
+                    text = "10-Band DSP (±10 dB)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

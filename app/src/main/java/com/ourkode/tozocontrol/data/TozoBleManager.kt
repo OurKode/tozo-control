@@ -282,6 +282,7 @@ class TozoBleManager(private val context: Context) {
         }
 
         if (_isConnected.value && writeChar != null) {
+            queryDeviceTelemetry()
             return
         }
 
@@ -453,15 +454,6 @@ class TozoBleManager(private val context: Context) {
                             }
                             prefs.edit().putString("last_mac", dev.address).putString("last_name", _connectedDeviceName.value).apply()
                         }
-
-                        pendingNoiseMode?.let { mode ->
-                            pendingNoiseMode = null
-                            setNoiseMode(mode)
-                        }
-                        pendingGameMode?.let { enable ->
-                            pendingGameMode = null
-                            setGameMode(enable)
-                        }
                     } else {
                         _isConnected.value = false
                         _statusText.value = "TX characteristic not found"
@@ -470,34 +462,24 @@ class TozoBleManager(private val context: Context) {
                     if (notifyChar != null) {
                         gatt.setCharacteristicNotification(notifyChar, true)
                         val descriptor = notifyChar.getDescriptor(CCCD_UUID)
+                        var descriptorWriteInitiated = false
                         if (descriptor != null) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                            val res = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
                             } else {
                                 @Suppress("DEPRECATION")
                                 descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                                 @Suppress("DEPRECATION")
                                 gatt.writeDescriptor(descriptor)
                             }
+                            descriptorWriteInitiated = res
                         }
-
-                        scope.launch {
-                            delay(300)
-                            // Query hardware state directly from earbud registers
-                            sendHex("00010000", "Read Firmware")
-                            delay(150)
-                            sendHex("00020000", "Read Battery")
-                            delay(150)
-                            sendHex("00060000", "Read Game Mode")
-                            delay(150)
-                            sendHex("00280000", "Read Active Noise Mode")
-                            delay(150)
-                            sendHex("00110000", "Read Boot Noise Mode")
-                            delay(150)
-                            sendHex("000b0000", "Read Equalizer Status")
-                            delay(150)
-                            sendHex("00030000", "Read Touch Config")
+                        if (!descriptorWriteInitiated) {
+                            Log.w(TAG, "CCCD descriptor write could not be initiated, falling back to query directly")
+                            flushPendingAndQueryTelemetry()
                         }
+                    } else {
+                        flushPendingAndQueryTelemetry()
                     }
                 } else {
                     _isConnected.value = false
@@ -508,7 +490,18 @@ class TozoBleManager(private val context: Context) {
             }
         }
 
-        @Suppress("DEPRECATION")
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+        override fun onDescriptorWrite(gatt: BluetoothGatt?, descriptor: BluetoothGattDescriptor?, status: Int) {
+            Log.w(TAG, "onDescriptorWrite uuid=${descriptor?.uuid} status=$status")
+            if (descriptor?.uuid == CCCD_UUID && status == BluetoothGatt.GATT_SUCCESS) {
+                flushPendingAndQueryTelemetry()
+            } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "CCCD descriptor write failed ($status), launching fallback telemetry query")
+                flushPendingAndQueryTelemetry()
+            }
+        }
+
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
             if (characteristic?.uuid == NOTIFY_UUID) {
                 val data = characteristic.value ?: return
@@ -609,7 +602,58 @@ class TozoBleManager(private val context: Context) {
         }
         // 6. Touch Configuration: 00 03 0a [5B Left] [5B Right] [chk]
         else if (hexStr.startsWith("00030a") && data.size >= 13) {
-            _touchConfig.value = parseTouchConfig(data)
+            val cfg = parseTouchConfig(data)
+            _touchConfig.value = cfg
+            prefs.edit()
+                .putInt("touch_left_single", cfg.leftSingle.code.toInt())
+                .putInt("touch_left_double", cfg.leftDouble.code.toInt())
+                .putInt("touch_left_triple", cfg.leftTriple.code.toInt())
+                .putInt("touch_left_long", cfg.leftLong.code.toInt())
+                .putInt("touch_right_single", cfg.rightSingle.code.toInt())
+                .putInt("touch_right_double", cfg.rightDouble.code.toInt())
+                .putInt("touch_right_triple", cfg.rightTriple.code.toInt())
+                .putInt("touch_right_long", cfg.rightLong.code.toInt())
+                .apply()
+        }
+    }
+
+    private var telemetryJob: Job? = null
+
+    private fun flushPendingAndQueryTelemetry() {
+        scope.launch {
+            delay(100)
+            pendingNoiseMode?.let { mode ->
+                pendingNoiseMode = null
+                setNoiseMode(mode)
+                delay(200)
+            }
+            pendingGameMode?.let { enable ->
+                pendingGameMode = null
+                setGameMode(enable)
+                delay(200)
+            }
+            queryDeviceTelemetry()
+        }
+    }
+
+    fun queryDeviceTelemetry() {
+        if (!_isConnected.value || writeChar == null) return
+        if (telemetryJob?.isActive == true) return
+        telemetryJob = scope.launch {
+            Log.d(TAG, "Querying full earbud telemetry...")
+            sendHex("00010000", "Read Firmware")
+            delay(150)
+            sendHex("00020000", "Read Battery")
+            delay(150)
+            sendHex("00060000", "Read Game Mode")
+            delay(150)
+            sendHex("00280000", "Read Active Noise Mode")
+            delay(150)
+            sendHex("00110000", "Read Boot Noise Mode")
+            delay(150)
+            sendHex("000b0000", "Read Equalizer Status")
+            delay(150)
+            sendHex("00030000", "Read Touch Config")
         }
     }
 

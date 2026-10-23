@@ -47,6 +47,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         bleManager.connect(mac)
     }
 
+    fun queryDeviceTelemetry() {
+        bleManager.queryDeviceTelemetry()
+    }
+
     fun disconnect() {
         bleManager.disconnect()
     }

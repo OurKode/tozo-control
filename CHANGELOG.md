@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed unnecessary app reconnection by preserving cached MAC address across disconnect events and prioritizing verified GATT MAC over bonded audio MACs.
 - Fixed Quick Tile label to directly display active noise profile ("ANC", "Pass", or "Normal") with responsive connection subtitle.
 - Removed premature BLE GATT teardown from ViewModel `onCleared()` to allow background Quick Tiles to operate seamlessly.
+- Fixed TWS state desync when reopening app from Recents by handling `onDescriptorWrite` callback before sending queries and refreshing telemetry on app resume.
+- Shortened device sub-header to clean MAC display and simplified Equalizer, Noise Control, and Game Mode subtitles per antislop copywriting standards.
 
 
 ## [1.3.0] - 2026-10-16
