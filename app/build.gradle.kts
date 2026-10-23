@@ -7,7 +7,7 @@ plugins {
 // Semantic Versioning Configuration (SemVer 2.0.0)
 // Formula: versionCode = MAJOR * 10000 + MINOR * 100 + PATCH
 val versionMajor = 1
-val versionMinor = 3
+val versionMinor = 4
 val versionPatch = 0
 
 android {
