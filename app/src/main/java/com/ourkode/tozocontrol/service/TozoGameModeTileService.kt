@@ -25,8 +25,19 @@ class TozoGameModeTileService : TileService() {
         val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         scope = coroutineScope
 
+        // If disconnected when notification shade is pulled down, initiate background reconnect
+        if (!bleManager.isConnected.value && !bleManager.isConnecting.value) {
+            bleManager.connect()
+        }
+
         coroutineScope.launch {
             bleManager.isConnected.collect {
+                updateTileState()
+            }
+        }
+
+        coroutineScope.launch {
+            bleManager.isConnecting.collect {
                 updateTileState()
             }
         }
@@ -46,12 +57,6 @@ class TozoGameModeTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        if (!bleManager.isConnected.value) {
-            bleManager.connect()
-            updateTileState()
-            return
-        }
-
         val current = bleManager.isGameMode.value
         bleManager.setGameMode(!current)
         updateTileState()
@@ -60,21 +65,26 @@ class TozoGameModeTileService : TileService() {
     private fun updateTileState() {
         val tile = qsTile ?: return
         val isConnected = bleManager.isConnected.value
+        val isConnecting = bleManager.isConnecting.value
         val isGameMode = bleManager.isGameMode.value
 
         tile.label = "Game Mode"
 
-        if (!isConnected) {
-            tile.state = Tile.STATE_UNAVAILABLE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = "Disconnected"
-            }
-        } else {
-            tile.state = if (isGameMode) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = if (isGameMode) "45 ms (On)" else "Off"
+        // Never set STATE_UNAVAILABLE so Android SystemUI never blocks onClick events
+        tile.state = when {
+            !isConnected -> Tile.STATE_INACTIVE
+            isGameMode -> Tile.STATE_ACTIVE
+            else -> Tile.STATE_INACTIVE
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = when {
+                isConnected -> if (isGameMode) "45 ms (On)" else "Off"
+                isConnecting -> "Connecting..."
+                else -> "Offline"
             }
         }
+
         tile.updateTile()
     }
 }
