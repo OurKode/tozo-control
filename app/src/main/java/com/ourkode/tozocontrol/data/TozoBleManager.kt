@@ -129,7 +129,7 @@ class TozoBleManager(private val context: Context) {
     val connectedDeviceName: StateFlow<String> = _connectedDeviceName.asStateFlow()
 
     private val _connectedDeviceAddress = MutableStateFlow(
-        prefs.getString("last_mac", "")?.takeIf { !it.endsWith(":AB:C7", ignoreCase = true) } ?: ""
+        prefs.getString("last_mac", "") ?: ""
     )
     val connectedDeviceAddress: StateFlow<String> = _connectedDeviceAddress.asStateFlow()
 
@@ -156,6 +156,11 @@ class TozoBleManager(private val context: Context) {
 
     private val _isGameMode = MutableStateFlow(prefs.getBoolean("last_game_mode", false))
     val isGameMode: StateFlow<Boolean> = _isGameMode.asStateFlow()
+
+    @Volatile
+    private var pendingNoiseMode: NoiseMode? = null
+    @Volatile
+    private var pendingGameMode: Boolean? = null
 
     private val savedEqList = prefs.getString("last_eq_gains", null)?.split(",")?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == 10 } ?: List(10) { 0.0f }
     private val _currentEq = MutableStateFlow(savedEqList)
@@ -276,6 +281,14 @@ class TozoBleManager(private val context: Context) {
             return
         }
 
+        if (_isConnected.value && writeChar != null) {
+            return
+        }
+
+        if (_isConnecting.value) {
+            return
+        }
+
         disconnect()
         _isConnecting.value = true
 
@@ -291,7 +304,21 @@ class TozoBleManager(private val context: Context) {
             }
         }
 
-        // 2. Check bonded devices (LE or DUAL only, ignore Classic audio MAC)
+        // 2. Check last known GATT connected MAC address (PRIORITY: verified BLE GATT address)
+        val savedMac = prefs.getString("last_mac", null)
+        if (!savedMac.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(savedMac)) {
+            try {
+                val device = bluetoothAdapter.getRemoteDevice(savedMac)
+                _connectedDeviceAddress.value = savedMac
+                Log.w(TAG, "Reconnecting directly to saved device: $savedMac")
+                connectToDevice(device)
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Connection to saved address failed, scanning for devices...", e)
+            }
+        }
+
+        // 3. Check bonded devices (LE or DUAL only, ignore Classic audio MAC)
         try {
             val bonded = bluetoothAdapter.bondedDevices
             val tozoBonded = bonded?.firstOrNull { d ->
@@ -310,20 +337,6 @@ class TozoBleManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking bonded devices", e)
-        }
-
-        // 3. Check last known GATT connected MAC address
-        val savedMac = prefs.getString("last_mac", null)
-        if (!savedMac.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(savedMac)) {
-            try {
-                val device = bluetoothAdapter.getRemoteDevice(savedMac)
-                _connectedDeviceAddress.value = savedMac
-                Log.w(TAG, "Reconnecting to last known device: $savedMac")
-                connectToDevice(device)
-                return
-            } catch (e: Exception) {
-                Log.w(TAG, "Connection to saved address failed, scanning for devices...", e)
-            }
         }
 
         // 4. Dynamically scan for nearby TOZO devices
@@ -387,9 +400,6 @@ class TozoBleManager(private val context: Context) {
                 _batteryRight.value = 0
                 _firmwareVersion.value = "--"
 
-                // Clear cached MAC if connection fails
-                prefs.edit().remove("last_mac").apply()
-
                 if (wasConnecting && !isScanning) {
                     Log.w(TAG, "GATT failed ($status), switching to automatic BLE scan...")
                     _statusText.value = "Scanning for TOZO devices..."
@@ -442,6 +452,15 @@ class TozoBleManager(private val context: Context) {
                                 _connectedDeviceName.value = dev.name
                             }
                             prefs.edit().putString("last_mac", dev.address).putString("last_name", _connectedDeviceName.value).apply()
+                        }
+
+                        pendingNoiseMode?.let { mode ->
+                            pendingNoiseMode = null
+                            setNoiseMode(mode)
+                        }
+                        pendingGameMode?.let { enable ->
+                            pendingGameMode = null
+                            setGameMode(enable)
                         }
                     } else {
                         _isConnected.value = false
@@ -627,10 +646,16 @@ class TozoBleManager(private val context: Context) {
     }
 
     fun setGameMode(enable: Boolean) {
-        if (!_isConnected.value || writeChar == null) return
-        val hexCmd = if (enable) "1006010101" else "1006010000"
         _isGameMode.value = enable
         prefs.edit().putBoolean("last_game_mode", enable).apply()
+
+        if (!_isConnected.value || writeChar == null) {
+            pendingGameMode = enable
+            connect()
+            return
+        }
+
+        val hexCmd = if (enable) "1006010101" else "1006010000"
         sendHex(hexCmd, "Game Mode ${if (enable) "ON" else "OFF"}")
         scope.launch {
             delay(500)
@@ -639,9 +664,15 @@ class TozoBleManager(private val context: Context) {
     }
 
     fun setNoiseMode(mode: NoiseMode) {
-        if (!_isConnected.value || writeChar == null) return
         _currentNoiseMode.value = mode
         prefs.edit().putString("last_noise_mode", mode.name).apply()
+
+        if (!_isConnected.value || writeChar == null) {
+            pendingNoiseMode = mode
+            connect()
+            return
+        }
+
         // 1. Send active DSP noise cancellation mode switch
         sendHex(mode.hexCmd, "Mode ${mode.label}")
         // 2. Persist to earbud NVRAM for boot-up / reconnect memory (isRememberType: CA0D)

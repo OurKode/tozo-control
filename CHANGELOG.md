@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Smooth animated color state transitions for noise cancellation mode tiles and equalizer preset pills.
 - Comprehensive design specification in DESIGN.md detailing identity, typography, telemetry colors, and motion dials.
 
+### Fixed
+- Fixed Quick Settings Tiles interaction when app is killed or removed from Recents by avoiding `STATE_UNAVAILABLE` and executing queued mode commands on connection.
+- Fixed unnecessary app reconnection by preserving cached MAC address across disconnect events and prioritizing verified GATT MAC over bonded audio MACs.
+- Fixed Quick Tile label to directly display active noise profile ("ANC", "Pass", or "Normal") with responsive connection subtitle.
+- Removed premature BLE GATT teardown from ViewModel `onCleared()` to allow background Quick Tiles to operate seamlessly.
+
 
 ## [1.3.0] - 2026-10-16
 ### Added

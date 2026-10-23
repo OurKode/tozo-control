@@ -107,6 +107,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         super.onCleared()
-        bleManager.disconnect()
+        // Retain BLE link so Quick Settings Tiles can continue controlling hardware without reconnect delays
     }
 }

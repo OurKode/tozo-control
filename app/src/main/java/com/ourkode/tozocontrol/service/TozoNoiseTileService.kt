@@ -26,8 +26,19 @@ class TozoNoiseTileService : TileService() {
         val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         scope = coroutineScope
 
+        // If disconnected when notification shade is pulled down, initiate background reconnect
+        if (!bleManager.isConnected.value && !bleManager.isConnecting.value) {
+            bleManager.connect()
+        }
+
         coroutineScope.launch {
             bleManager.isConnected.collect {
+                updateTileState()
+            }
+        }
+
+        coroutineScope.launch {
+            bleManager.isConnecting.collect {
                 updateTileState()
             }
         }
@@ -47,12 +58,6 @@ class TozoNoiseTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        if (!bleManager.isConnected.value) {
-            bleManager.connect()
-            updateTileState()
-            return
-        }
-
         val current = bleManager.currentNoiseMode.value
         val next = when (current) {
             NoiseMode.ANC -> NoiseMode.TRANSPARENCY
@@ -68,49 +73,33 @@ class TozoNoiseTileService : TileService() {
     private fun updateTileState() {
         val tile = qsTile ?: return
         val isConnected = bleManager.isConnected.value
+        val isConnecting = bleManager.isConnecting.value
         val currentMode = bleManager.currentNoiseMode.value
 
-        tile.label = "Noise Control"
+        // Direct, concise mode display: ANC, Normal, or Pass
+        tile.label = when (currentMode) {
+            NoiseMode.ANC -> "ANC"
+            NoiseMode.TRANSPARENCY -> "Pass"
+            NoiseMode.NORMAL -> "Normal"
+            NoiseMode.REDUCE_WIND -> "Wind"
+            NoiseMode.LEISURE -> "Leisure"
+        }
 
-        if (!isConnected) {
-            tile.state = Tile.STATE_UNAVAILABLE
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = "Disconnected"
-            }
-        } else {
-            when (currentMode) {
-                NoiseMode.NORMAL -> {
-                    tile.state = Tile.STATE_INACTIVE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = "Normal"
-                    }
-                }
-                NoiseMode.ANC -> {
-                    tile.state = Tile.STATE_ACTIVE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = "ANC"
-                    }
-                }
-                NoiseMode.TRANSPARENCY -> {
-                    tile.state = Tile.STATE_ACTIVE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = "Transparency"
-                    }
-                }
-                NoiseMode.REDUCE_WIND -> {
-                    tile.state = Tile.STATE_ACTIVE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = "Wind"
-                    }
-                }
-                NoiseMode.LEISURE -> {
-                    tile.state = Tile.STATE_ACTIVE
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        tile.subtitle = "Leisure"
-                    }
-                }
+        // Never set STATE_UNAVAILABLE so Android SystemUI never blocks onClick events
+        tile.state = when {
+            !isConnected -> Tile.STATE_INACTIVE
+            currentMode == NoiseMode.NORMAL -> Tile.STATE_INACTIVE
+            else -> Tile.STATE_ACTIVE
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = when {
+                isConnected -> "Noise Control"
+                isConnecting -> "Connecting..."
+                else -> "Offline"
             }
         }
+
         tile.updateTile()
     }
 }
