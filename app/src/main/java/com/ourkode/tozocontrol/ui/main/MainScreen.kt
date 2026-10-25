@@ -1,7 +1,9 @@
 package com.ourkode.tozocontrol.ui.main
 
 import android.Manifest
+import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,6 +18,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +56,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
+import com.ourkode.tozocontrol.Settings
 import com.ourkode.tozocontrol.data.NoiseMode
 import com.ourkode.tozocontrol.data.TouchAction
 import com.ourkode.tozocontrol.data.TouchConfig
@@ -65,37 +70,28 @@ import kotlin.math.roundToInt
 val FREQ_LABELS = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")
 
 val PRESET_MAP = mapOf(
+    "Reference Flat" to listOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+    "Harman Target" to listOf(3.5f, 3.0f, 1.5f, 0.0f, 0.0f, 1.5f, 3.0f, 1.5f, -0.5f, 1.0f),
+    "Diffuse Field" to listOf(-1.5f, -1.0f, 0.0f, 0.0f, 0.0f, 2.0f, 3.5f, 2.5f, 1.0f, 1.5f),
+    "Vocal Clarity" to listOf(-2.0f, -1.5f, -0.5f, 0.5f, 1.5f, 3.0f, 3.5f, 2.0f, -1.0f, 0.5f),
+    "Warm Punch" to listOf(4.0f, 3.5f, 2.5f, 1.0f, 0.5f, 0.0f, 0.5f, 0.0f, -1.5f, 0.0f),
+    // Backward compatibility aliases for stored settings and remote hardware sync
     "Flat" to listOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
-    "Bass +" to listOf(2.0f, 2.0f, 2.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
-    "Bass -" to listOf(-2.0f, -2.0f, -2.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f),
-    "Treble +" to listOf(-1.5f, -1.5f, -1.5f, -1.0f, -1.0f, -1.0f, 1.0f, 2.0f, 3.0f, 4.0f),
-    "Treble -" to listOf(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -2.0f, -3.0f, -3.0f, -3.0f, -4.0f),
-    "Pop" to listOf(-1.0f, -1.0f, -1.0f, 1.0f, 3.0f, 3.0f, 1.0f, -1.0f, -2.0f, -3.0f),
-    "Rock" to listOf(1.5f, 1.5f, 1.5f, 2.0f, -1.0f, -1.0f, 1.0f, 2.0f, 2.0f, 2.0f),
-    "Classical" to listOf(2.0f, 1.5f, 1.5f, 1.5f, -2.0f, -2.0f, 0.0f, 2.0f, 3.0f, 3.0f),
-    "Jazz" to listOf(1.0f, 1.0f, 2.0f, 2.0f, -2.0f, -2.0f, 0.0f, 2.0f, 3.0f, 2.0f),
-    "Vocal" to listOf(-2.0f, -2.0f, -2.0f, -2.0f, 1.0f, 2.0f, 2.0f, 1.0f, 0.0f, -3.0f),
-    "Electronic" to listOf(2.3f, 2.3f, 1.8f, 1.0f, -2.4f, 1.0f, 0.1f, 1.0f, 1.8f, 1.8f),
-    "Hip-Hop" to listOf(1.0f, 1.0f, 1.0f, 2.0f, -1.0f, -1.0f, 2.0f, -1.0f, 2.0f, 2.0f),
-    "R&B" to listOf(3.4f, 3.4f, 3.4f, 0.1f, -3.3f, -3.3f, 0.1f, 0.9f, 0.9f, 1.7f),
-    "Dance" to listOf(1.0f, 1.0f, 1.0f, -2.0f, -1.0f, 1.0f, 2.0f, 2.0f, 1.0f, -3.0f),
-    "Deep" to listOf(1.0f, 1.0f, 1.0f, 1.0f, 3.0f, 3.0f, 2.0f, -2.0f, -3.0f, -3.0f),
-    "Blues" to listOf(3.0f, 3.0f, 3.0f, 1.0f, -2.0f, -2.0f, 2.0f, 2.0f, 3.0f, 3.0f),
-    "Metal" to listOf(-1.3f, 2.6f, 1.7f, -1.3f, -1.3f, -0.4f, 0.8f, 1.8f, -0.1f, 2.2f),
-    "Piano" to listOf(0.0f, 0.0f, 0.0f, 2.0f, 3.0f, 2.0f, 3.0f, 3.0f, 2.0f, 2.0f),
-    "Podcast" to listOf(-3.0f, -3.0f, -2.5f, 1.7f, 3.3f, 3.3f, 2.5f, 1.7f, 0.0f, -1.7f),
-    "Acoustic" to listOf(2.0f, 1.5f, 0.5f, 0.0f, 0.0f, 0.5f, 1.5f, 2.0f, 1.5f, 1.0f),
-    // Backward compatibility aliases for previous user preferences
-    "Bass Boost" to listOf(2.0f, 2.0f, 2.0f, 2.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
-    "Treble Boost" to listOf(-1.5f, -1.5f, -1.5f, -1.0f, -1.0f, -1.0f, 1.0f, 2.0f, 3.0f, 4.0f),
-    "Vocal Focus" to listOf(-2.0f, -2.0f, -2.0f, -2.0f, 1.0f, 2.0f, 2.0f, 1.0f, 0.0f, -3.0f)
+    "Bass +" to listOf(4.0f, 3.5f, 2.5f, 1.0f, 0.5f, 0.0f, 0.5f, 0.0f, -1.5f, 0.0f),
+    "Bass Boost" to listOf(4.0f, 3.5f, 2.5f, 1.0f, 0.5f, 0.0f, 0.5f, 0.0f, -1.5f, 0.0f),
+    "Treble +" to listOf(-1.5f, -1.0f, 0.0f, 0.0f, 0.0f, 2.0f, 3.5f, 2.5f, 1.0f, 1.5f),
+    "Treble Boost" to listOf(-1.5f, -1.0f, 0.0f, 0.0f, 0.0f, 2.0f, 3.5f, 2.5f, 1.0f, 1.5f),
+    "Vocal" to listOf(-2.0f, -1.5f, -0.5f, 0.5f, 1.5f, 3.0f, 3.5f, 2.0f, -1.0f, 0.5f),
+    "Vocal Focus" to listOf(-2.0f, -1.5f, -0.5f, 0.5f, 1.5f, 3.0f, 3.5f, 2.0f, -1.0f, 0.5f),
+    "Acoustic" to listOf(3.5f, 3.0f, 1.5f, 0.0f, 0.0f, 1.5f, 3.0f, 1.5f, -0.5f, 1.0f)
 )
 
 val PRESET_NAMES = listOf(
-    "Flat", "Bass +", "Bass -", "Treble +", "Treble -",
-    "Pop", "Rock", "Classical", "Jazz", "Vocal",
-    "Electronic", "Hip-Hop", "R&B", "Dance", "Deep",
-    "Blues", "Metal", "Piano", "Podcast", "Acoustic",
+    "Reference Flat",
+    "Harman Target",
+    "Diffuse Field",
+    "Vocal Clarity",
+    "Warm Punch",
     "Custom"
 )
 
@@ -107,13 +103,16 @@ private enum class MobileScreenTab(val label: String) {
 @Composable
 fun MainScreen(
     onItemClick: (NavKey) -> Unit = {},
+    onNavigateToSettings: () -> Unit = { onItemClick(Settings) },
     isDark: Boolean = false,
     onToggleTheme: () -> Unit = {},
+    isHapticEnabled: Boolean = true,
     modifier: Modifier = Modifier,
     viewModel: MainScreenViewModel = viewModel()
 ) {
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val isConnecting by viewModel.isConnecting.collectAsStateWithLifecycle()
+    val isBluetoothEnabled by viewModel.isBluetoothEnabled.collectAsStateWithLifecycle()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsStateWithLifecycle()
     val connectedDeviceAddress by viewModel.connectedDeviceAddress.collectAsStateWithLifecycle()
     val statusText by viewModel.statusText.collectAsStateWithLifecycle()
@@ -130,9 +129,21 @@ fun MainScreen(
     val isEqPending by viewModel.isEqPending.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val bluetoothManager = remember { context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager }
+    val isBtActive = (bluetoothManager?.adapter?.isEnabled == true) || isBluetoothEnabled
     val prefs = remember { context.getSharedPreferences("tozo_prefs", Context.MODE_PRIVATE) }
 
-    val savedPreset = remember { prefs.getString("active_preset", "Flat") ?: "Flat" }
+    val rawSavedPreset = remember { prefs.getString("active_preset", "Reference Flat") ?: "Reference Flat" }
+    val savedPreset = remember(rawSavedPreset) {
+        when (rawSavedPreset) {
+            "Flat" -> "Reference Flat"
+            "Bass +", "Bass Boost" -> "Warm Punch"
+            "Treble +", "Treble Boost" -> "Diffuse Field"
+            "Vocal", "Vocal Focus" -> "Vocal Clarity"
+            "Acoustic", "Pop", "Rock", "Electronic", "R&B", "Dance", "Hip-Hop" -> "Harman Target"
+            else -> if (PRESET_NAMES.contains(rawSavedPreset)) rawSavedPreset else "Reference Flat"
+        }
+    }
     val savedCustom = remember {
         prefs.getString("custom_eq_gains", null)?.split(",")?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == 10 }
             ?: List(10) { 0f }
@@ -204,8 +215,11 @@ fun MainScreen(
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val adapterOn = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.isEnabled == true
         if (isConnected) {
             viewModel.queryDeviceTelemetry()
+        } else if (adapterOn && !isConnecting) {
+            viewModel.connect()
         }
     }
 
@@ -230,11 +244,17 @@ fun MainScreen(
                 macAddress = if (connectedDeviceAddress.isNotBlank()) connectedDeviceAddress else "Auto-Discovery",
                 isConnected = isConnected,
                 isConnecting = isConnecting,
+                isBtDisabled = !isBtActive,
                 statusText = statusText,
-                isDark = isDark,
-                onToggleTheme = onToggleTheme,
+                onSettingsClick = onNavigateToSettings,
                 onConnectClick = {
-                    if (isConnected || isConnecting) {
+                    if (!isBtActive) {
+                        try {
+                            context.startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
+                        } catch (_: Exception) {
+                            viewModel.connect()
+                        }
+                    } else if (isConnected || isConnecting) {
                         viewModel.disconnect()
                     } else {
                         viewModel.connect()
@@ -299,8 +319,8 @@ fun MainScreen(
                                 val flat = List(10) { 0f }
                                 eqGains = flat
                                 customGains = flat
-                                activePreset = "Flat"
-                                persistEqState("Flat", flat, flat)
+                                activePreset = "Reference Flat"
+                                persistEqState("Reference Flat", flat, flat)
                                 viewModel.resetEq()
                             },
                             onPowerOff = { viewModel.powerOff() }
@@ -344,8 +364,8 @@ fun MainScreen(
                                 val flat = List(10) { 0f }
                                 eqGains = flat
                                 customGains = flat
-                                activePreset = "Flat"
-                                persistEqState("Flat", flat, flat)
+                                activePreset = "Reference Flat"
+                                persistEqState("Reference Flat", flat, flat)
                                 if (isConnected && !isEqPending) {
                                     viewModel.setEqGains(flat)
                                 }
@@ -382,11 +402,21 @@ fun MainScreen(
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(200)) togetherWith
-                            fadeOut(animationSpec = tween(200))
+                            val isGoingRight = targetState.ordinal > initialState.ordinal
+                            val direction = if (isGoingRight) 1 else -1
+                            (slideInHorizontally(
+                                initialOffsetX = { (it * 0.12f * direction).toInt() },
+                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(200, easing = LinearOutSlowInEasing))) togetherWith
+                            (slideOutHorizontally(
+                                targetOffsetX = { (-it * 0.12f * direction).toInt() },
+                                animationSpec = tween(180, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(160, easing = FastOutLinearInEasing)))
                         },
                         label = "tab_content",
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) { targetTab ->
                         when (targetTab) {
                             MobileScreenTab.CONTROLS -> {
@@ -430,8 +460,8 @@ fun MainScreen(
                                              val flat = List(10) { 0f }
                                              eqGains = flat
                                              customGains = flat
-                                             activePreset = "Flat"
-                                             persistEqState("Flat", flat, flat)
+                                             activePreset = "Reference Flat"
+                                             persistEqState("Reference Flat", flat, flat)
                                              viewModel.resetEq()
                                         },
                                         onPowerOff = { viewModel.powerOff() }
@@ -476,8 +506,8 @@ fun MainScreen(
                                             val flat = List(10) { 0f }
                                             eqGains = flat
                                             customGains = flat
-                                            activePreset = "Flat"
-                                            persistEqState("Flat", flat, flat)
+                                            activePreset = "Reference Flat"
+                                            persistEqState("Reference Flat", flat, flat)
                                             if (isConnected && !isEqPending) {
                                                 viewModel.setEqGains(flat)
                                             }
@@ -518,12 +548,13 @@ private fun TopDeviceBar(
     macAddress: String,
     isConnected: Boolean,
     isConnecting: Boolean,
+    isBtDisabled: Boolean,
     statusText: String,
-    isDark: Boolean,
-    onToggleTheme: () -> Unit,
+    onSettingsClick: () -> Unit,
     onConnectClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -534,7 +565,7 @@ private fun TopDeviceBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
                     text = deviceName,
                     style = MaterialTheme.typography.titleLarge,
@@ -550,6 +581,7 @@ private fun TopDeviceBar(
                     val dotColor = when {
                         isConnected -> StatusGreen
                         isConnecting -> StatusAmber
+                        isBtDisabled -> StatusRed
                         else -> StatusMuted
                     }
                     Box(
@@ -562,10 +594,12 @@ private fun TopDeviceBar(
                         text = when {
                             isConnected -> if (macAddress.isNotBlank() && macAddress != "Auto-Discovery") macAddress else "Connected"
                             isConnecting -> if (statusText.isNotBlank()) statusText else "Connecting..."
+                            isBtDisabled -> "Bluetooth Disabled"
+                            statusText.isNotBlank() && statusText != "Disconnected" && !statusText.contains("Bluetooth is disabled", ignoreCase = true) -> statusText
                             else -> "Disconnected"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isBtDisabled) StatusRed else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -576,13 +610,12 @@ private fun TopDeviceBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Accessible Theme Switcher (48x48dp touch target)
-                ThemeIconButton(
-                    isDark = isDark,
-                    onClick = onToggleTheme
+                // Accessible Settings Button (48x48dp touch target)
+                SettingsIconButton(
+                    onClick = onSettingsClick
                 )
 
-                // Primary Connection Button (Min height 44dp, touch target 48dp)
+                // Primary Connection Button (Min height 48dp, touch target 48dp)
                 Button(
                     onClick = onConnectClick,
                     enabled = true,
@@ -592,7 +625,7 @@ private fun TopDeviceBar(
                     ),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                    modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                 ) {
                     if (isConnecting) {
                         CircularProgressIndicator(
@@ -608,7 +641,11 @@ private fun TopDeviceBar(
                         )
                     } else {
                         Text(
-                            text = if (isConnected) "Disconnect" else "Connect",
+                            text = when {
+                                isConnected -> "Disconnect"
+                                isBtDisabled -> "Enable BT"
+                                else -> "Connect"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -620,65 +657,56 @@ private fun TopDeviceBar(
 }
 
 @Composable
-private fun ThemeIconButton(
-    isDark: Boolean,
+fun SettingsIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
+        val strokeColor = MaterialTheme.colorScheme.onSurface
         Canvas(modifier = Modifier.size(20.dp)) {
-            val strokeColor = if (isDark) Color(0xFFF4F4F2) else Color(0xFF111111)
             val center = Offset(size.width / 2f, size.height / 2f)
+            val outerRadius = 6.5.dp.toPx()
+            val innerRadius = 3.dp.toPx()
 
-            if (isDark) {
-                // Sun Icon (tap to switch to light)
-                val radius = 5.dp.toPx()
-                drawCircle(color = strokeColor, radius = radius, center = center)
+            drawCircle(
+                color = strokeColor,
+                radius = outerRadius,
+                center = center,
+                style = Stroke(width = 1.8.dp.toPx())
+            )
+            drawCircle(
+                color = strokeColor,
+                radius = innerRadius,
+                center = center,
+                style = Stroke(width = 1.5.dp.toPx())
+            )
 
-                val rayLen = 2.5.dp.toPx()
-                val rayStart = radius + 2.dp.toPx()
-                val rayEnd = rayStart + rayLen
-
-                for (i in 0 until 8) {
-                    val angle = (i * 45f) * (Math.PI / 180f).toFloat()
-                    val cosA = kotlin.math.cos(angle)
-                    val sinA = kotlin.math.sin(angle)
-                    drawLine(
-                        color = strokeColor,
-                        start = Offset(center.x + cosA * rayStart, center.y + sinA * rayStart),
-                        end = Offset(center.x + cosA * rayEnd, center.y + sinA * rayEnd),
-                        strokeWidth = 1.5.dp.toPx()
-                    )
-                }
-            } else {
-                // Crescent Moon Icon (tap to switch to dark)
-                val path = Path().apply {
-                    moveTo(size.width * 0.75f, size.height * 0.15f)
-                    cubicTo(
-                        size.width * 0.25f, size.height * 0.25f,
-                        size.width * 0.25f, size.height * 0.75f,
-                        size.width * 0.75f, size.height * 0.85f
-                    )
-                    cubicTo(
-                        size.width * 0.45f, size.height * 0.75f,
-                        size.width * 0.45f, size.height * 0.25f,
-                        size.width * 0.75f, size.height * 0.15f
-                    )
-                    close()
-                }
-                drawPath(path = path, color = strokeColor)
+            for (i in 0 until 6) {
+                val angle = (i * 60f) * (Math.PI / 180f).toFloat()
+                val cosA = kotlin.math.cos(angle)
+                val sinA = kotlin.math.sin(angle)
+                val toothStart = outerRadius - 0.5.dp.toPx()
+                val toothEnd = outerRadius + 2.5.dp.toPx()
+                drawLine(
+                    color = strokeColor,
+                    start = Offset(center.x + cosA * toothStart, center.y + sinA * toothStart),
+                    end = Offset(center.x + cosA * toothEnd, center.y + sinA * toothEnd),
+                    strokeWidth = 2.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
             }
         }
     }
 }
+
 
 // ============================================================
 // 2. SEGMENTED MODE SELECTOR (PHONE VIEW)
@@ -690,6 +718,9 @@ private fun SegmentedModeSelector(
     onTabSelected: (MobileScreenTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -702,8 +733,16 @@ private fun SegmentedModeSelector(
     ) {
         MobileScreenTab.entries.forEach { tab ->
             val isSelected = selectedTab == tab
-            val bg = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent
-            val textColor = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            val bg by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                label = "tab_bg_${tab.name}"
+            )
+            val textColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = tween(180, easing = FastOutSlowInEasing),
+                label = "tab_text_${tab.name}"
+            )
 
             Box(
                 modifier = Modifier
@@ -711,7 +750,10 @@ private fun SegmentedModeSelector(
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(8.dp))
                     .background(bg)
-                    .clickable { onTabSelected(tab) },
+                    .clickable {
+                        haptic.performIf(hapticEnabled, HapticFeedbackType.LongPress)
+                        onTabSelected(tab)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -795,8 +837,8 @@ private fun EarbudBatteryPod(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        border = null
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
@@ -825,13 +867,19 @@ private fun EarbudBatteryPod(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Gauge bar with semantic battery warning
-            val barColor = when {
+            // Gauge bar with animated semantic battery warning
+            val targetBarColor = when {
                 !isConnected -> MaterialTheme.colorScheme.outline
                 percentage <= 20 -> StatusRed
                 percentage <= 35 -> StatusAmber
                 else -> StatusGreen
             }
+
+            val animatedBarColor by animateColorAsState(
+                targetValue = targetBarColor,
+                animationSpec = tween(350, easing = FastOutSlowInEasing),
+                label = "battery_bar_color"
+            )
 
             Box(
                 modifier = Modifier
@@ -846,7 +894,7 @@ private fun EarbudBatteryPod(
                             .fillMaxWidth(animatedProgress)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(2.dp))
-                            .background(barColor)
+                            .background(animatedBarColor)
                     )
                 }
             }
@@ -955,34 +1003,43 @@ private fun NoiseModeTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
+
     val bg by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = tween(200),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "noise_tile_bg_$title"
     )
     val borderCol by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        animationSpec = tween(200),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "noise_tile_border_$title"
     )
     val titleCol by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        animationSpec = tween(200),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "noise_tile_title_$title"
     )
     val subCol by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(200),
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "noise_tile_sub_$title"
     )
 
     Box(
         modifier = modifier
-            .height(52.dp)
+            .defaultMinSize(minHeight = 52.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .border(1.dp, borderCol, RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(
+                enabled = enabled,
+                onClick = {
+                    haptic.performIf(hapticEnabled, HapticFeedbackType.LongPress)
+                    onClick()
+                }
+            )
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -1159,60 +1216,17 @@ private fun EqualizerPanel(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Preset Pills (Horizontal Scroll with generous 44dp touch area)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+        // Preset Pills (Virtualized LazyRow with smooth 120Hz recycling)
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            PRESET_NAMES.forEach { presetName ->
-                val isSelected = activePreset == presetName
-                val bg by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    animationSpec = tween(200),
-                    label = "preset_bg_$presetName"
+            items(PRESET_NAMES, key = { it }) { presetName ->
+                PresetPill(
+                    presetName = presetName,
+                    isSelected = activePreset == presetName,
+                    onClick = { onSelectPreset(presetName) }
                 )
-                val borderCol by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    animationSpec = tween(200),
-                    label = "preset_border_$presetName"
-                )
-                val fg by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    animationSpec = tween(200),
-                    label = "preset_fg_$presetName"
-                )
-
-                Surface(
-                    onClick = { onSelectPreset(presetName) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = bg,
-                    border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderCol),
-                    modifier = Modifier.height(40.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(fg)
-                            )
-                        }
-                        Text(
-                            text = presetName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                            color = fg,
-                            maxLines = 1
-                        )
-                    }
-                }
             }
         }
 
@@ -1230,6 +1244,127 @@ private fun EqualizerPanel(
 }
 
 @Composable
+private fun PresetPill(
+    presetName: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
+
+    val bg by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "preset_bg"
+    )
+    val borderCol by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "preset_border"
+    )
+    val fg by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "preset_fg"
+    )
+
+    Surface(
+        onClick = {
+            haptic.performIf(hapticEnabled, HapticFeedbackType.LongPress)
+            onClick()
+        },
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderCol),
+        modifier = modifier.defaultMinSize(minHeight = 44.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            AnimatedVisibility(
+                visible = isSelected,
+                enter = fadeIn(animationSpec = tween(150)) + expandHorizontally(animationSpec = tween(150)),
+                exit = fadeOut(animationSpec = tween(100)) + shrinkHorizontally(animationSpec = tween(100))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(fg)
+                )
+            }
+            Text(
+                text = presetName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                color = fg,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun FrequencyBandPill(
+    freqLabel: String,
+    gainDb: Float,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val outlineColor = MaterialTheme.colorScheme.outline
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val bg by animateColorAsState(
+        targetValue = if (isSelected) primaryColor else surfaceVariantColor,
+        animationSpec = tween(180, easing = FastOutSlowInEasing),
+        label = "band_bg_$freqLabel"
+    )
+    val borderCol by animateColorAsState(
+        targetValue = if (isSelected) primaryColor else outlineColor,
+        animationSpec = tween(180, easing = FastOutSlowInEasing),
+        label = "band_border_$freqLabel"
+    )
+
+    val gainStr = "${if (gainDb > 0) "+" else ""}${"%.1f".format(gainDb)}"
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderCol),
+        modifier = modifier.defaultMinSize(minWidth = 54.dp, minHeight = 48.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = freqLabel,
+                style = TelemetryLabelStyle,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) onPrimaryColor else onSurfaceColor
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = gainStr,
+                style = TelemetryLabelStyle,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isSelected) onPrimaryColor.copy(alpha = 0.9f) else onSurfaceVariantColor
+            )
+        }
+    }
+}
+
+@Composable
 private fun InteractiveGraphicEq(
     eqGains: List<Float>,
     enabled: Boolean,
@@ -1238,7 +1373,12 @@ private fun InteractiveGraphicEq(
 ) {
     var selectedBandIndex by remember { mutableIntStateOf(4) } // Default selection: 500 Hz
     val haptic = LocalHapticFeedback.current
+    val isHaptic = LocalHapticEnabled.current
     val currentOnGainChange by rememberUpdatedState(onGainChange)
+
+    fun triggerHaptic() {
+        haptic.performIf(isHaptic, HapticFeedbackType.TextHandleMove)
+    }
     val textMeasurer = rememberTextMeasurer()
 
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -1247,6 +1387,57 @@ private fun InteractiveGraphicEq(
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
     val primaryColor = MaterialTheme.colorScheme.primary
+
+    // Reusable Path allocations to eliminate per-frame GC allocations
+    val curvePath = remember { Path() }
+    val fillPath = remember { Path() }
+
+    // Pre-measured static label layouts to prevent layout thrashing inside Canvas draw loop
+    val cachedDbLayouts = remember(textMeasurer, onSurfaceColor, onSurfaceVariantColor) {
+        listOf(
+            10f to textMeasurer.measure(
+                text = "+10",
+                style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Normal, color = onSurfaceVariantColor.copy(alpha = 0.6f))
+            ),
+            0f to textMeasurer.measure(
+                text = "0",
+                style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = onSurfaceColor.copy(alpha = 0.8f))
+            ),
+            -10f to textMeasurer.measure(
+                text = "-10",
+                style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Normal, color = onSurfaceVariantColor.copy(alpha = 0.6f))
+            )
+        )
+    }
+
+    val cachedFreqLayouts = remember(textMeasurer, primaryColor, onSurfaceVariantColor) {
+        FREQ_LABELS.mapIndexed { index, freqText ->
+            textMeasurer.measure(
+                text = freqText,
+                style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = primaryColor)
+            ) to textMeasurer.measure(
+                text = freqText,
+                style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Normal, color = onSurfaceVariantColor)
+            )
+        }
+    }
+
+    // Pre-measure all 41 possible dB badge text layouts (-10.0 to +10.0 in 0.5dB steps) for 0-allocation Canvas tooltip
+    val cachedBadgeLayouts = remember(textMeasurer, onSurfaceColor) {
+        (-20..20).associate { step ->
+            val db = step * 0.5f
+            val str = "${if (db > 0) "+" else ""}${"%.1f".format(db)} dB"
+            val layout = textMeasurer.measure(
+                text = str,
+                style = TextStyle(
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onSurfaceColor
+                )
+            )
+            step to layout
+        }
+    }
 
     // M3 Expressive tactile spring animation for all 10 hardware EQ bands
     val animatedGains = (0..9).map { index ->
@@ -1296,7 +1487,7 @@ private fun InteractiveGraphicEq(
                             val roundedDb = (rawDb * 2).roundToInt() / 2.0f
 
                             if (roundedDb != eqGains.getOrElse(bandIndex) { 0f }) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                triggerHaptic()
                                 currentOnGainChange(bandIndex, roundedDb)
                             }
                         }
@@ -1343,19 +1534,11 @@ private fun InteractiveGraphicEq(
                         strokeWidth = if (isZero) 1.5.dp.toPx() else 0.75.dp.toPx()
                     )
 
-                    if (db == 10f || db == 0f || db == -10f) {
-                        val dbText = if (db > 0) "+10" else if (db < 0) "-10" else "0"
-                        val textLayout = textMeasurer.measure(
-                            text = dbText,
-                            style = TextStyle(
-                                fontSize = 9.sp,
-                                fontWeight = if (isZero) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isZero) onSurfaceColor.copy(alpha = 0.8f) else onSurfaceVariantColor.copy(alpha = 0.6f)
-                            )
-                        )
+                    val dbLayout = cachedDbLayouts.firstOrNull { it.first == db }?.second
+                    if (dbLayout != null) {
                         drawText(
-                            textLayoutResult = textLayout,
-                            topLeft = Offset(leftPad - textLayout.size.width - 4.dp.toPx(), y - textLayout.size.height / 2f)
+                            textLayoutResult = dbLayout,
+                            topLeft = Offset(leftPad - dbLayout.size.width - 4.dp.toPx(), y - dbLayout.size.height / 2f)
                         )
                     }
                 }
@@ -1373,18 +1556,11 @@ private fun InteractiveGraphicEq(
                         strokeWidth = if (isSelected) 1.25.dp.toPx() else 0.75.dp.toPx()
                     )
 
-                    val freqText = FREQ_LABELS[i]
-                    val textLayout = textMeasurer.measure(
-                        text = freqText,
-                        style = TextStyle(
-                            fontSize = 10.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) primaryColor else onSurfaceVariantColor
-                        )
-                    )
+                    val (selectedFreqLayout, normalFreqLayout) = cachedFreqLayouts[i]
+                    val freqLayout = if (isSelected) selectedFreqLayout else normalFreqLayout
                     drawText(
-                        textLayoutResult = textLayout,
-                        topLeft = Offset(x - textLayout.size.width / 2f, size.height - bottomPad + 5.dp.toPx())
+                        textLayoutResult = freqLayout,
+                        topLeft = Offset(x - freqLayout.size.width / 2f, size.height - bottomPad + 5.dp.toPx())
                     )
 
                     val gain = animatedGains.getOrElse(i) { 0f }.coerceIn(-10f, 10f)
@@ -1393,8 +1569,8 @@ private fun InteractiveGraphicEq(
                     points.add(Offset(x, y))
                 }
 
-                // Smooth Spline Curve Path
-                val curvePath = Path()
+                // Reusable Spline Curve Path (zero allocation)
+                curvePath.reset()
                 curvePath.moveTo(points[0].x, points[0].y)
                 for (i in 0 until 9) {
                     val p0 = points[i]
@@ -1405,8 +1581,8 @@ private fun InteractiveGraphicEq(
                     curvePath.cubicTo(c1.x, c1.y, c2.x, c2.y, p1.x, p1.y)
                 }
 
-                // Translucent Area Fill relative to 0 dB Baseline
-                val fillPath = Path()
+                // Reusable Translucent Fill Path (zero allocation)
+                fillPath.reset()
                 fillPath.moveTo(points[0].x, zeroY)
                 fillPath.lineTo(points[0].x, points[0].y)
                 for (i in 0 until 9) {
@@ -1448,13 +1624,12 @@ private fun InteractiveGraphicEq(
                     }
                 }
 
-                // Tooltip Pill above or below Active Node
+                // Tooltip Pill above or below Active Node (zero-allocation cached layout)
                 val selPt = points[selectedBandIndex]
                 val selGain = eqGains.getOrElse(selectedBandIndex) { 0f }
-                val gainString = "${if (selGain > 0) "+" else ""}${"%.1f".format(selGain)} dB"
-
-                val badgeText = textMeasurer.measure(
-                    text = gainString,
+                val stepKey = (selGain * 2).roundToInt().coerceIn(-20, 20)
+                val badgeText = cachedBadgeLayouts[stepKey] ?: textMeasurer.measure(
+                    text = "${if (selGain > 0) "+" else ""}${"%.1f".format(selGain)} dB",
                     style = TextStyle(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1472,7 +1647,8 @@ private fun InteractiveGraphicEq(
                 } else {
                     selPt.y + 18.dp.toPx()
                 }
-                val badgeCenterX = selPt.x.coerceIn(leftPad + badgeW / 2f, size.width - rightPad - badgeW / 2f)
+                val maxBadgeX = (size.width - rightPad - badgeW / 2f).coerceAtLeast(leftPad + badgeW / 2f)
+                val badgeCenterX = selPt.x.coerceIn(leftPad + badgeW / 2f, maxBadgeX)
                 val badgeTopLeft = Offset(badgeCenterX - badgeW / 2f, badgeCenterY - badgeH / 2f)
 
                 drawRoundRect(
@@ -1527,42 +1703,17 @@ private fun InteractiveGraphicEq(
             (0..9).forEach { bandIdx ->
                 val isSelected = bandIdx == selectedBandIndex
                 val gainVal = eqGains.getOrElse(bandIdx) { 0f }
-                val gainStr = "${if (gainVal > 0) "+" else ""}${"%.1f".format(gainVal)}"
                 val freqLbl = FREQ_LABELS[bandIdx]
 
-                Surface(
+                FrequencyBandPill(
+                    freqLabel = freqLbl,
+                    gainDb = gainVal,
+                    isSelected = isSelected,
                     onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        triggerHaptic()
                         selectedBandIndex = bandIdx
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isSelected) primaryColor else surfaceVariantColor,
-                    border = BorderStroke(
-                        width = if (isSelected) 1.5.dp else 1.dp,
-                        color = if (isSelected) primaryColor else outlineColor
-                    ),
-                    modifier = Modifier.defaultMinSize(minWidth = 54.dp, minHeight = 48.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = freqLbl,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else onSurfaceColor
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = gainStr,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f) else onSurfaceVariantColor
-                        )
                     }
-                }
+                )
             }
         }
 
@@ -1597,14 +1748,14 @@ private fun InteractiveGraphicEq(
                     FilledTonalButton(
                         onClick = {
                             if (selectedBandIndex > 0) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                triggerHaptic()
                                 selectedBandIndex--
                             }
                         },
                         enabled = enabled && selectedBandIndex > 0,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(
                             text = "< Prev",
@@ -1616,14 +1767,12 @@ private fun InteractiveGraphicEq(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = formattedFreq,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
+                            style = TelemetryLabelStyle,
                             color = onSurfaceVariantColor
                         )
                         Text(
                             text = "${if (selectedGain > 0) "+" else ""}${"%.1f".format(selectedGain)} dB",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            style = TelemetryValueStyle,
                             color = onSurfaceColor
                         )
                     }
@@ -1631,14 +1780,14 @@ private fun InteractiveGraphicEq(
                     FilledTonalButton(
                         onClick = {
                             if (selectedBandIndex < 9) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                triggerHaptic()
                                 selectedBandIndex++
                             }
                         },
                         enabled = enabled && selectedBandIndex < 9,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(
                             text = "Next >",
@@ -1656,7 +1805,7 @@ private fun InteractiveGraphicEq(
                     onValueChange = { newVal ->
                         val rounded = (newVal * 2).roundToInt() / 2.0f
                         if (rounded != selectedGain) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            triggerHaptic()
                             currentOnGainChange(selectedBandIndex, rounded)
                         }
                     },
@@ -1677,7 +1826,7 @@ private fun InteractiveGraphicEq(
                     Button(
                         onClick = {
                             val newG = (selectedGain - 0.5f).coerceAtLeast(-10.0f)
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            triggerHaptic()
                             currentOnGainChange(selectedBandIndex, newG)
                         },
                         enabled = enabled && selectedGain > -10.0f,
@@ -1690,7 +1839,7 @@ private fun InteractiveGraphicEq(
                         border = BorderStroke(1.dp, outlineColor),
                         modifier = Modifier
                             .weight(1f)
-                            .defaultMinSize(minHeight = 42.dp)
+                            .defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(
                             text = "-0.5 dB",
@@ -1702,7 +1851,7 @@ private fun InteractiveGraphicEq(
                     // Reset: 0 dB
                     OutlinedButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            triggerHaptic()
                             currentOnGainChange(selectedBandIndex, 0.0f)
                         },
                         enabled = enabled && selectedGain != 0.0f,
@@ -1710,7 +1859,7 @@ private fun InteractiveGraphicEq(
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .defaultMinSize(minHeight = 42.dp)
+                            .defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(
                             text = "0 dB",
@@ -1723,7 +1872,7 @@ private fun InteractiveGraphicEq(
                     Button(
                         onClick = {
                             val newG = (selectedGain + 0.5f).coerceAtMost(10.0f)
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            triggerHaptic()
                             currentOnGainChange(selectedBandIndex, newG)
                         },
                         enabled = enabled && selectedGain < 10.0f,
@@ -1736,7 +1885,7 @@ private fun InteractiveGraphicEq(
                         border = BorderStroke(1.dp, outlineColor),
                         modifier = Modifier
                             .weight(1f)
-                            .defaultMinSize(minHeight = 42.dp)
+                            .defaultMinSize(minHeight = 48.dp)
                     ) {
                         Text(
                             text = "+0.5 dB",
@@ -1912,26 +2061,27 @@ private fun TouchSlotRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .defaultMinSize(minHeight = 48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = isConnected, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = gesture,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = if (isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
         Surface(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(enabled = isConnected, onClick = onClick),
+            shape = RoundedCornerShape(6.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Text(
                 text = action.label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
@@ -1961,7 +2111,9 @@ private fun DeviceActionsPanel(
             OutlinedButton(
                 onClick = onResetEq,
                 enabled = isConnected,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = 48.dp),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Reset EQ", style = MaterialTheme.typography.labelMedium)
@@ -1969,7 +2121,9 @@ private fun DeviceActionsPanel(
             OutlinedButton(
                 onClick = { showPowerOffConfirm = true },
                 enabled = isConnected,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = 48.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error

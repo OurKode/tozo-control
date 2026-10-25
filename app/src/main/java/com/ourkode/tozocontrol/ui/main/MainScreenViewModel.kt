@@ -18,6 +18,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     val isConnected = bleManager.isConnected
     val isConnecting = bleManager.isConnecting
+    val isBluetoothEnabled = bleManager.isBluetoothEnabled
     val connectedDeviceName = bleManager.connectedDeviceName
     val connectedDeviceAddress = bleManager.connectedDeviceAddress
     val statusText = bleManager.statusText

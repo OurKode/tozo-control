@@ -44,3 +44,11 @@ Thumbs.db
 
 # CodeGraph
 .codegraph/
+
+# Python / Desktop
+desktop/
+__pycache__/
+*.py[cod]
+*$py.class
+dist/
+*.spec

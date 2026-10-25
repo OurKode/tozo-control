@@ -31,13 +31,20 @@
     - Disconnected: `#6B7280` (Muted Slate)
 
 ## 3. Typography
-- **Primary Font**: Clean System Sans-Serif (Roboto / Google Sans) with high legibility.
-- **Telemetry & Audio Values**: Tabular numerals for gain dB indicators (`+3.5 dB`) and frequency labels (`31 Hz`, `16 kHz`) to prevent visual jitter when dragging sliders.
-- **Type Scale**:
-  - Headline: 20sp SemiBold (Device header)
-  - Section Title: 16sp SemiBold (Studio Equalizer, Noise Isolation)
-  - Body / Subtitle: 13sp-14sp Regular / Medium
-  - Labels & Chips: 11sp-12sp Medium / Bold
+- **Primary Font**: Clean System Sans-Serif (Google Sans / Roboto) for all UI hierarchy, headings, and labels.
+- **Telemetry & Hardware Registers**: Dedicated Monospace tabular tokens (TelemetryValueStyle, TelemetryLabelStyle) for dB gain indicators (+3.5 dB) and frequency labels (31 Hz, 16 kHz) to eliminate horizontal jitter when dragging sliders.
+- **Material 3 Type Scale**:
+  - displayLarge: 24sp Bold, line-height 30sp, tracking -0.4sp (Hero metrics)
+  - headlineMedium: 20sp SemiBold, line-height 26sp, tracking -0.2sp (Primary titles)
+  - 	itleLarge: 18sp SemiBold, line-height 24sp, tracking -0.1sp (Top bar device title)
+  - 	itleMedium: 15sp SemiBold, line-height 20sp, tracking 0sp (Card section headers)
+  - 	itleSmall: 14sp SemiBold, line-height 18sp, tracking 0sp (Nested group headers)
+  - odyLarge: 15sp Regular, line-height 22sp (Readable dialog descriptions)
+  - odyMedium: 13sp Regular, line-height 18sp (Card body copy & interactive options)
+  - odySmall: 12sp Regular, line-height 16sp, tracking 0.1sp (Helper text & subtitles)
+  - labelLarge: 14sp SemiBold, line-height 20sp (Primary button labels)
+  - labelMedium: 12sp Medium, line-height 16sp (Filter pills & tab navigation)
+  - labelSmall: 11sp Medium, line-height 15sp (Badges & status metadata)
 
 ## 4. Motion & Expressive Transitions (Material 3)
 - **Fader Curve Interpolation**:

@@ -5,7 +5,10 @@ import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.*
@@ -123,6 +126,71 @@ class TozoBleManager(private val context: Context) {
     private val _isConnecting = MutableStateFlow(false)
     val isConnecting: StateFlow<Boolean> = _isConnecting.asStateFlow()
 
+    private val _isBluetoothEnabled = MutableStateFlow(bluetoothAdapter?.isEnabled == true)
+    val isBluetoothEnabled: StateFlow<Boolean> = _isBluetoothEnabled.asStateFlow()
+
+    private val btReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    when (state) {
+                        BluetoothAdapter.STATE_ON -> {
+                            Log.d(TAG, "System broadcast: Bluetooth enabled")
+                            _isBluetoothEnabled.value = true
+                            if (_statusText.value.contains("Bluetooth is disabled", ignoreCase = true)) {
+                                _statusText.value = "Disconnected"
+                            }
+                            if (!_isConnected.value && !_isConnecting.value) {
+                                connect()
+                            }
+                        }
+                        BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> {
+                            Log.d(TAG, "System broadcast: Bluetooth disabled")
+                            _isBluetoothEnabled.value = false
+                            _statusText.value = "Bluetooth is disabled"
+                            disconnect()
+                        }
+                    }
+                }
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    val devName = device?.name ?: ""
+                    if (devName.contains("TOZO", ignoreCase = true) ||
+                        devName.contains("AeroSound", ignoreCase = true) ||
+                        devName.contains("A3", ignoreCase = true)
+                    ) {
+                        Log.d(TAG, "System broadcast: TOZO ACL connected ($devName)")
+                        if (!_isConnected.value && !_isConnecting.value) {
+                            connect()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    init {
+        val filter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(btReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                context.registerReceiver(btReceiver, filter)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering Bluetooth broadcast receiver", e)
+        }
+    }
+
     private val _connectedDeviceName = MutableStateFlow(
         prefs.getString("last_name", "TOZO AeroSound") ?: "TOZO AeroSound"
     )
@@ -195,7 +263,10 @@ class TozoBleManager(private val context: Context) {
                     name.contains("AeroSound", ignoreCase = true) ||
                     name.contains("A3", ignoreCase = true)
 
-            val isTozoMac = address.startsWith("94:4B:F8", ignoreCase = true)
+            val isTozoMac = address.startsWith("94:4B:F8", ignoreCase = true) ||
+                    address.startsWith("00:42", ignoreCase = true) ||
+                    address.startsWith("E8:07", ignoreCase = true) ||
+                    address.startsWith("70:C9", ignoreCase = true)
 
             // Check manufacturer data (TOZO uses 0xFF with 'WR' or 'WOER' mark)
             var hasTozoManufacturer = false
@@ -275,7 +346,10 @@ class TozoBleManager(private val context: Context) {
     }
 
     fun connect(explicitMac: String? = null) {
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: bluetoothAdapter
+        val isEnabled = adapter?.isEnabled == true
+        _isBluetoothEnabled.value = isEnabled
+        if (!isEnabled) {
             _statusText.value = "Bluetooth is disabled"
             _isConnecting.value = false
             return
@@ -292,11 +366,12 @@ class TozoBleManager(private val context: Context) {
 
         disconnect()
         _isConnecting.value = true
+        _statusText.value = "Connecting..."
 
         // 1. Explicit MAC address provided
         if (!explicitMac.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(explicitMac)) {
             try {
-                val device = bluetoothAdapter.getRemoteDevice(explicitMac)
+                val device = adapter.getRemoteDevice(explicitMac)
                 _connectedDeviceAddress.value = explicitMac
                 connectToDevice(device)
                 return
@@ -309,7 +384,7 @@ class TozoBleManager(private val context: Context) {
         val savedMac = prefs.getString("last_mac", null)
         if (!savedMac.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(savedMac)) {
             try {
-                val device = bluetoothAdapter.getRemoteDevice(savedMac)
+                val device = adapter.getRemoteDevice(savedMac)
                 _connectedDeviceAddress.value = savedMac
                 Log.w(TAG, "Reconnecting directly to saved device: $savedMac")
                 connectToDevice(device)
@@ -321,7 +396,7 @@ class TozoBleManager(private val context: Context) {
 
         // 3. Check bonded devices (LE or DUAL only, ignore Classic audio MAC)
         try {
-            val bonded = bluetoothAdapter.bondedDevices
+            val bonded = adapter.bondedDevices
             val tozoBonded = bonded?.firstOrNull { d ->
                 val n = d.name ?: ""
                 val matchesName = n.contains("TOZO", ignoreCase = true) ||

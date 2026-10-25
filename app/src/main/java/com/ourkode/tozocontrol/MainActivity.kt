@@ -1,6 +1,5 @@
 package com.ourkode.tozocontrol
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,35 +8,40 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ourkode.tozocontrol.data.AppPreferencesRepository
 import com.ourkode.tozocontrol.theme.TOZOControlTheme
 
 class MainActivity : ComponentActivity() {
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-    val prefs = getSharedPreferences("tozo_prefs", Context.MODE_PRIVATE)
+        val prefsRepo = AppPreferencesRepository.getInstance(applicationContext)
 
-    enableEdgeToEdge()
-    setContent {
-      var isDark by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
-      val dynamicColor by remember { mutableStateOf(prefs.getBoolean("dynamic_color", true)) }
+        enableEdgeToEdge()
+        setContent {
+            val settings by prefsRepo.settings.collectAsStateWithLifecycle()
 
-      TOZOControlTheme(darkTheme = isDark, dynamicColor = dynamicColor) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-          MainNavigation(
-            isDark = isDark,
-            onToggleTheme = {
-              val next = !isDark
-              isDark = next
-              prefs.edit().putBoolean("dark_mode", next).apply()
+            TOZOControlTheme(
+                themeMode = settings.themeMode,
+                palette = settings.palette,
+                dynamicColor = settings.dynamicColor,
+                hapticEnabled = settings.hapticEnabled
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainNavigation(
+                        appSettings = settings,
+                        onThemeModeChange = { prefsRepo.setThemeMode(it) },
+                        onDynamicColorChange = { prefsRepo.setDynamicColor(it) },
+                        onPaletteChange = { prefsRepo.setPalette(it) },
+                        onHapticChange = { prefsRepo.setHapticEnabled(it) }
+                    )
+                }
             }
-          )
         }
-      }
     }
-  }
 }

@@ -3,8 +3,9 @@
 Companion app open-source untuk earbud TOZO (khususnya AeroSound 3). Berkomunikasi langsung dengan hardware registers earbud via Bluetooth Low Energy (GATT) tanpa analytics, iklan, atau background tracking.
 
 ## Tech Stack
-- **Language**: Kotlin 2.0 (JVM Target 21)
+- **Android Language**: Kotlin 2.0 (JVM Target 21)
 - **UI Framework**: Jetpack Compose + Material 3 (Adaptive phone/tablet layout)
+- **Navigation**: Jetpack Navigation 3 (`NavKey`, `NavDisplay`, `entryProvider` — dilarang memakai Navigation 2.x / `NavController`)
 - **Architecture**: MVVM with unidirectional data flow (`StateFlow`, Kotlin Coroutines)
 - **Android Platform**: Min SDK 26 (Android 8.0), Target/Compile SDK 36 (Android 15)
 - **Connectivity**: Android BLE GATT (`BluetoothGatt`, `BluetoothGattCallback`, Mutex-guarded commands)
@@ -15,12 +16,14 @@ Companion app open-source untuk earbud TOZO (khususnya AeroSound 3). Berkomunika
 - **Run Unit Tests**: `.\gradlew.bat testDebugUnitTest`
 - **Build Debug APK**: `.\gradlew.bat assembleDebug`
 - **Build Release APK**: `.\gradlew.bat assembleRelease`
-- **Explore Codebase**: `codegraph explore "<symbol or query>"`
+- **Explore Codebase**: `codegraph explore "<symbol or query>"` (sertakan `projectPath` jika dipanggil via MCP)
 
 ## Code Conventions
+- **Navigation 3 Architecture**: Selalu gunakan pattern Navigation 3 (`NavKey`, `rememberNavBackStack`, `NavDisplay`). Jangan pernah mengimpor atau mereferensikan library `androidx.navigation:navigation-compose` lama.
 - **BLE Concurrency**: Selalu gunakan `Mutex` untuk sinkronisasi antrean GATT write. Jangan pernah mengirim concurrent writes tanpa menunggu callback `onCharacteristicWrite`.
-- **Rate Limiting**: Gunakan cooldown buffer (minimal 100-300 ms) saat user menggeser fader EQ atau toggle ANC untuk mencegah register freeze pada earbud.
+- **Rate Limiting**: Gunakan cooldown buffer (minimal 100-300 ms, 400 ms untuk profile switch ANC, 450 ms untuk game mode) saat user menggeser fader EQ atau toggle ANC untuk mencegah register freeze pada earbud.
 - **State Management**: Simpan single source of truth hardware state di [`TozoBleManager`](app/src/main/java/com/ourkode/tozocontrol/data/TozoBleManager.kt) diekspos melalui `StateFlow`. UI hanya mengonsumsi state via [`MainScreenViewModel`](app/src/main/java/com/ourkode/tozocontrol/ui/main/MainScreenViewModel.kt).
+- **System Tiles**: Quick Settings Tile services ([`TozoGameModeTileService`](app/src/main/java/com/ourkode/tozocontrol/service/TozoGameModeTileService.kt) dan [`TozoNoiseTileService`](app/src/main/java/com/ourkode/tozocontrol/service/TozoNoiseTileService.kt)) wajib menggunakan instance singleton `TozoBleManager.getInstance(context)`.
 - **Packet Protocol**:
   - Header: Opcode (2 byte) + Payload Length (1 byte)
   - Checksum: `(sum(payload) % 256).toByte()`
@@ -56,4 +59,3 @@ For UI, copy, people, mobile layout, or code comments work, read `antislop.md` (
 Before starting, ask the user when antislop applies: during the work, or after it is done.
 To update antislop later: download `antislop.md` again, or run `npx antislop-ai --update` if it was installed as skill folders.
 <!-- antislop:end -->
-

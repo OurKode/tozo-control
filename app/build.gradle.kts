@@ -49,6 +49,13 @@ android {
         excludes += "/META-INF/*.txt"
       }
     }
+
+    testOptions {
+      unitTests.all {
+        it.maxParallelForks = 1
+        it.jvmArgs("-Xmx512m", "-XX:MaxMetaspaceSize=192m")
+      }
+    }
 }
 
 base {
