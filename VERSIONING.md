@@ -56,6 +56,8 @@ defaultConfig {
 | `1.1.1` | 1 | 1 | 1 | `10101` | Patch: Zero-overflow graphic equalizer spline curve |
 | `1.2.0` | 1 | 2 | 0 | `10200` | Minor: TOZO AeroSound 3 reverse-engineered protocol (touch gesture remapping, hardware DSP reset, power off) |
 | `1.3.0` | 1 | 3 | 0 | `10300` | Minor: 20 authentic TOZO hardware DSP equalizer presets suite |
+| `1.4.0` | 1 | 4 | 0 | `10400` | Minor: Quick Settings Tiles (ANC cycling & Low Latency), singleton BLE link |
+| `1.5.0` | 1 | 5 | 0 | `10500` | Minor: Material 3 Settings, 6 audiophile curves, live BT sync & auto-reconnect |
 | `2.0.0` | 2 | 0 | 0 | `20000` | Major: Architectural rewrite or `minSdk` bump |
 
 ---
