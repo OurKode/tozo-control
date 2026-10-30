@@ -2,6 +2,15 @@
 
 Companion app open-source untuk earbud TOZO (khususnya AeroSound 3). Berkomunikasi langsung dengan hardware registers earbud via Bluetooth Low Energy (GATT) tanpa analytics, iklan, atau background tracking.
 
+## Context Map
+Load only what the task needs, not all of it.
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — layers, file map, state-ownership and cooldown contracts, known seams, "where to make a change" table. Load before any non-trivial edit.
+- **[DESIGN.md](DESIGN.md)** — colour system, type scale, motion specs. Required for any UI work.
+- **[README.md](README.md)** — BLE protocol reference. Required before touching packet bytes.
+- **[VERSIONING.md](VERSIONING.md)** / **[CHANGELOG.md](CHANGELOG.md)** — release formula and user-facing change log.
+- `CLAUDE.md` is a pointer to this file, not a second copy of the rules. Do not duplicate rules into other files.
+
 ## Tech Stack
 - **Android Language**: Kotlin 2.0 (JVM Target 21)
 - **UI Framework**: Jetpack Compose + Material 3 (Adaptive phone/tablet layout)
