@@ -45,6 +45,11 @@ Thumbs.db
 # CodeGraph
 .codegraph/
 
+# Internal notes and tool state — never publish
+docs/internal/
+docs/ideas/
+.commandcode/
+
 # Python / Desktop
 desktop/
 __pycache__/
